@@ -6,7 +6,7 @@ echo ============================================
 echo.
 
 REM -- Paso 1: Regenerar dashboard --
-echo [1/6] Regenerando dashboard...
+echo [1/7] Regenerando dashboard...
 python regenerar_dashboard.py
 if %errorlevel% neq 0 (
     echo ERROR: No se pudo regenerar el dashboard.
@@ -17,7 +17,7 @@ echo OK: Dashboard regenerado correctamente.
 echo.
 
 REM -- Paso 2: Regenerar Excel --
-echo [2/6] Regenerando Excel...
+echo [2/7] Regenerando Excel...
 python crear_excel_completo.py
 if %errorlevel% neq 0 (
     echo ERROR: No se pudo regenerar el Excel.
@@ -28,7 +28,7 @@ echo OK: Excel regenerado correctamente.
 echo.
 
 REM -- Paso 3: Verificar repositorio git --
-echo [3/6] Verificando repositorio git...
+echo [3/7] Verificando repositorio git...
 git status >nul 2>&1
 if %errorlevel% neq 0 (
     echo No es un repositorio git. Inicializando...
@@ -41,7 +41,7 @@ if %errorlevel% neq 0 (
 echo.
 
 REM -- Paso 4: Configurar remote si no existe --
-echo [4/6] Verificando conexion con GitHub...
+echo [4/7] Verificando conexion con GitHub...
 git remote get-url origin >nul 2>&1
 if %errorlevel% neq 0 (
     git remote add origin https://github.com/juanjosemas/dashboard.git
@@ -51,8 +51,16 @@ if %errorlevel% neq 0 (
 )
 echo.
 
-REM -- Paso 5: Añadir archivos --
-echo [5/6] Preparando archivos para subir...
+REM -- Paso 5: Sincronizar con GitHub (pull antes de push) --
+echo [5/7] Sincronizando con GitHub...
+git stash >nul 2>&1
+git pull --rebase origin main
+git stash pop >nul 2>&1
+echo OK: Sincronizado.
+echo.
+
+REM -- Paso 6: Añadir archivos y commitear --
+echo [6/7] Preparando archivos para subir...
 git add dashboard.html
 git add logo_ecostruct.png 2>nul
 git add README.md 2>nul
@@ -61,15 +69,8 @@ git commit -m "Actualizacion del dashboard"
 echo OK: Cambios preparados.
 echo.
 
-REM -- Paso 6: Subir a GitHub --
-echo [6/6] Subiendo a GitHub...
-echo Sincronizando con GitHub...
-git pull --rebase origin main
-if %errorlevel% neq 0 (
-    echo ERROR: No se pudo sincronizar. Comprueba tu conexion a internet.
-    pause
-    exit /b 1
-)
+REM -- Paso 7: Subir a GitHub --
+echo [7/7] Subiendo a GitHub...
 git push -u origin main
 if %errorlevel% neq 0 (
     echo.
