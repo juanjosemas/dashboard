@@ -761,7 +761,7 @@ lines.append('  <div>')
 lines.append('    <h1>ECO STRUCT - Dashboard Financiero</h1>')
 lines.append('    <div class="date">Datos a fecha de 31/08/2026 | Gastos directos del CSV de Holded</div>')
 lines.append('  </div>')
-lines.append('  <div style="display:flex;align-items:center;gap:12px"><img src="' + _logo_b64 + '" alt="ECO STRUCT" style="height:50px;width:auto"><div style="text-align:right"><div style="font-size:1.25rem;font-weight:800;color:#2B3A4E;letter-spacing:0.5px">Constructive Ecosen</div><div style="font-size:1.1rem;font-weight:700;color:#5a6a7a">Spain 2.3</div></div></div>')
+lines.append('  <div style="display:flex;align-items:center;gap:14px"><a href="dashboard_v2.html" style="padding:8px 16px;border:2px solid #D4742C;border-radius:6px;font-size:0.75rem;font-weight:600;background:transparent;color:#D4742C;text-decoration:none;letter-spacing:0.5px;transition:all .2s" onmouseover="this.style.background=\"#D4742C\";this.style.color=\"white\"" onmouseout="this.style.background=\"transparent\";this.style.color=\"#D4742C\"">\u25C6 Dashboard Corporativo</a><img src="' + _logo_b64 + '" alt="ECO STRUCT" style="height:50px;width:auto"><div style="text-align:right"><div style="font-size:1.25rem;font-weight:800;color:#2B3A4E;letter-spacing:0.5px">Constructive Ecosen</div><div style="font-size:1.1rem;font-weight:700;color:#5a6a7a">Spain 2.3</div></div></div>')
 lines.append('</div>')
 
 lines.append('<div class="container">')
