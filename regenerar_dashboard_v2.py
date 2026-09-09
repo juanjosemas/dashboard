@@ -509,16 +509,22 @@ for _jl in _switch_js.split('\n'):
         lines.append(_jl)
 _js_lines_done = True
 
-# PDF generation (reads from regenerar_dashboard.py for full-featured PDF)
-import os as _os
+# PDF generation (extracts JS from regenerar_dashboard.py)
+import ast as _ast, re as _re, os as _os
 _v1_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'regenerar_dashboard.py')
 with open(_v1_path, 'r', encoding='utf-8') as _f:
     _v1_lines = _f.readlines()
-# Extract PDF function (lines 1086-1319 in regenerar_dashboard.py)
-for _pl in _v1_lines[1085:1319]:
-    _pl_s = _pl.rstrip()
-    if _pl_s:
-        lines.append(_pl_s)
+for _pl in _v1_lines[1085:1320]:
+    _s = _pl.strip()
+    if not _s or _s.startswith('#'):
+        continue
+    _m = _re.match(r"lines\.append\((.+)\)", _s)
+    if _m:
+        try:
+            _content = _ast.literal_eval(_m.group(1))
+            lines.append(_content)
+        except:
+            pass
 
 lines.append('</script>')
 lines.append('</body>')
