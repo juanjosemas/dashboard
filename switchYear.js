@@ -44,7 +44,7 @@ function switchYear(year,btn){
     var pc=p.has_cert?p.margen_pct.toFixed(1)+'%':'-';
     var ne=p.has_cert?'':` <span style="font-size:0.6rem;color:var(--text2)">(s/c)</span>`;
     var dn=p.nombre.length>28?p.nombre.substring(0,26)+'..':p.nombre;
-    mr+=`<tr${rs}><td title="${p.nombre}"><strong>${dn}</strong>${ne}</td>`;
+    mr+=`<tr${rs}><td title="${p.nombre}"><strong>${dn}</strong>${ne} <button onclick="event.stopPropagation();generateObraPDF(decodeURIComponent('${encodeURIComponent(p.nombre)}'))" title="PDF" style="background:var(--accent);color:#0f1923;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.6rem;font-weight:700;margin-left:3px">PDF</button></td>`;
     mr+=`<td class="num">${cl}</td><td class="num">${fmtE2(p.gastos_directos)}</td>`;
     mr+=`<td class="num">${pl}</td><td class="num">${fmtE2(p.mano_obra_coste)}</td>`;
     mr+=`<td class="num"><strong>${fmtE2(p.total_coste)}</strong></td><td class="num">${pc}</td>`;
