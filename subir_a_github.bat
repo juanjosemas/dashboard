@@ -5,30 +5,8 @@ echo   ECO STRUCT - Subir Dashboard a GitHub
 echo ============================================
 echo.
 
-REM -- Paso 1: Regenerar dashboard --
-echo [1/7] Regenerando dashboard...
-python regenerar_dashboard.py
-if %errorlevel% neq 0 (
-    echo ERROR: No se pudo regenerar el dashboard.
-    pause
-    exit /b 1
-)
-echo OK: Dashboard regenerado correctamente.
-echo.
-
-REM -- Paso 2: Regenerar Excel --
-echo [2/7] Regenerando Excel...
-python crear_excel_completo.py
-if %errorlevel% neq 0 (
-    echo ERROR: No se pudo regenerar el Excel.
-    pause
-    exit /b 1
-)
-echo OK: Excel regenerado correctamente.
-echo.
-
-REM -- Paso 3: Verificar repositorio git --
-echo [3/7] Verificando repositorio git...
+REM -- Paso 1: Verificar repositorio git --
+echo [1/4] Verificando repositorio git...
 git status >nul 2>&1
 if %errorlevel% neq 0 (
     echo No es un repositorio git. Inicializando...
@@ -40,8 +18,8 @@ if %errorlevel% neq 0 (
 )
 echo.
 
-REM -- Paso 4: Configurar remote si no existe --
-echo [4/7] Verificando conexion con GitHub...
+REM -- Paso 2: Configurar remote si no existe --
+echo [2/4] Verificando conexion con GitHub...
 git remote get-url origin >nul 2>&1
 if %errorlevel% neq 0 (
     git remote add origin https://github.com/juanjosemas/dashboard.git
@@ -51,27 +29,26 @@ if %errorlevel% neq 0 (
 )
 echo.
 
-REM -- Paso 5: Sincronizar con GitHub (pull antes de push) --
-echo [5/7] Sincronizando con GitHub...
+REM -- Paso 3: Sincronizar con GitHub (pull antes de push) --
+echo [3/4] Sincronizando con GitHub...
 git stash >nul 2>&1
 git pull --rebase origin main
 git stash pop >nul 2>&1
 echo OK: Sincronizado.
 echo.
 
-REM -- Paso 6: Añadir archivos y commitear --
-echo [6/7] Preparando archivos para subir...
+REM -- Paso 4: Añadir archivos, commitear y subir --
+echo [4/4] Preparando archivos y subiendo...
 git add dashboard.html
+git add dashboard_v2.html 2>nul
+git add switchYear.js 2>nul
 git add logo_ecostruct.png 2>nul
 git add README.md 2>nul
 git add ECO_STRUCT_Datos.xlsx 2>nul
+git add datos_ecostruct.json 2>nul
 git commit -m "Actualizacion del dashboard"
-echo OK: Cambios preparados.
-echo.
-
-REM -- Paso 7: Subir a GitHub --
-echo [7/7] Subiendo a GitHub...
 git push -u origin main
+
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: No se pudo subir. Comprueba:
