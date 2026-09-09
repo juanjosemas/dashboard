@@ -4,7 +4,23 @@ echo ============================================
 echo   ECO STRUCT - Actualizar Dashboard
 echo ============================================
 echo.
-echo [1/3] Regenerando dashboard...
+echo [1/4] Extrayendo datos frescos...
+echo.
+
+python extraer_datos.py
+
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo ERROR: No se pudieron extraer los datos.
+echo.
+    pause
+    exit /b 1
+)
+
+echo OK: Datos extraidos correctamente.
+echo.
+
+echo [2/4] Regenerando dashboards...
 echo.
 
 python regenerar_dashboard.py
@@ -19,10 +35,15 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo OK: Dashboard actualizado correctamente.
+echo OK: Dashboard v1 actualizado.
 echo.
 
-echo [2/3] Regenerando Excel...
+python regenerar_dashboard_v2.py
+
+echo OK: Dashboard v2 actualizado.
+echo.
+
+echo [3/4] Regenerando Excel...
 echo.
 
 python crear_excel_completo.py
@@ -39,7 +60,7 @@ echo.
 echo OK: Excel actualizado correctamente.
 echo.
 
-echo [3/3] Preguntando si quieres subir a GitHub...
+echo [4/4] Preguntando si quieres subir a GitHub...
 echo.
 
 set /p SUBIR="Quieres subir a GitHub Pages? (S/N): "
