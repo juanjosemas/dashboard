@@ -25,6 +25,17 @@ def parse_euro_amount(s):
     except:
         return 0.0
 
+def extract_year(fecha):
+    """Extract year from date string (DD/MM/YYYY or MM/DD/YYYY format)."""
+    if not fecha:
+        return None
+    m = re.search(r'(\d{4})', fecha)
+    if m:
+        yr = int(m.group(1))
+        if 2020 <= yr <= 2030:
+            return str(yr)
+    return None
+
 # ===== 1. CERTIFICACIONES =====
 doc_cert = Document(r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES.docx')
 
@@ -130,6 +141,14 @@ veh_total = 0.0
 veh_count = 0
 directos_por_proyecto = collections.defaultdict(lambda: {'total': 0.0, 'count': 0, 'facturas': []})
 
+# Per-year tracking for CSV
+gg_by_year = collections.defaultdict(float)
+gg_count_by_year = collections.defaultdict(int)
+veh_by_year = collections.defaultdict(float)
+veh_count_by_year = collections.defaultdict(int)
+directos_by_year = collections.defaultdict(float)
+ndirectos_by_year = collections.defaultdict(int)
+
 for row in reader:
     proyecto = ''
     importe_str = '0'
@@ -152,7 +171,7 @@ for row in reader:
             titulo = val
         elif 'proveedor' in key_lower and 'id' not in key_lower:
             proveedor = val
-        elif 'fecha' in key_lower and 'imputa' in key_lower:
+        elif key_lower == 'fecha':
             fecha = val
         elif 'digo' in key_lower or 'odigo' in key_lower:
             codigo = val
@@ -160,13 +179,20 @@ for row in reader:
             estado = val
     
     importe = parse_euro_amount(importe_str)
+    yr = extract_year(fecha)
     
     if 'GASTOS GENERALES' in proyecto:
         gg_total += importe
         gg_count += 1
+        if yr:
+            gg_by_year[yr] += importe
+            gg_count_by_year[yr] += 1
     elif 'VEHICULOS' in proyecto or 'VEH\u00cdCULOS' in proyecto:
         veh_total += importe
         veh_count += 1
+        if yr:
+            veh_by_year[yr] += importe
+            veh_count_by_year[yr] += 1
     elif proyecto:
         directos_por_proyecto[proyecto]['total'] += importe
         directos_por_proyecto[proyecto]['count'] += 1
@@ -174,6 +200,9 @@ for row in reader:
             'codigo': codigo, 'fecha': fecha, 'titulo': titulo,
             'importe': importe, 'proveedor': proveedor, 'estado': estado
         })
+        if yr:
+            directos_by_year[yr] += importe
+            ndirectos_by_year[yr] += 1
 
 total_gastos_comunes = gg_total + veh_total
 total_directos_csv = sum(d['total'] for d in directos_por_proyecto.values())
@@ -411,6 +440,99 @@ sum_coste = sum(p['total_coste'] for p in proyectos_data)
 sum_margen = sum(p['margen'] for p in proyectos_data)
 sin_cert_proyectos = [p for p in proyectos_data if not p['has_cert']]
 sum_sin_cert = sum(p['gastos_directos'] + p['mano_obra_coste'] for p in sin_cert_proyectos)
+
+# Compute per-year data for the year filter
+mo_by_year = collections.defaultdict(lambda: {'horas': 0, 'coste': 0.0})
+for m in mano_obra_all:
+    yk = str(m['year'])
+    mo_by_year[yk]['horas'] += m['horas']
+    mo_by_year[yk]['coste'] += mo_cost(m)
+
+# Build per-year direct costs lookup: {year: {csv_name: {total, count}}}
+dir_by_year_proj = collections.defaultdict(lambda: collections.defaultdict(lambda: {'total': 0.0, 'count': 0}))
+for proj_csv, d in directos_por_proyecto.items():
+    for f in d['facturas']:
+        yr = extract_year(f.get('fecha', ''))
+        if yr:
+            dir_by_year_proj[yr][proj_csv]['total'] += f['importe']
+            dir_by_year_proj[yr][proj_csv]['count'] += 1
+
+# Build MO lookup: {year: {mo_name: {horas, coste}}}
+mo_lookup = collections.defaultdict(lambda: collections.defaultdict(lambda: {'horas': 0, 'coste': 0.0}))
+for m in mano_obra_all:
+    yk = str(m['year'])
+    mo_lookup[yk][m['proyecto']]['horas'] += m['horas']
+    mo_lookup[yk][m['proyecto']]['coste'] += mo_cost(m)
+
+all_years = sorted(set(list(gg_by_year.keys()) + list(veh_by_year.keys()) + list(directos_by_year.keys()) + list(mo_by_year.keys())))
+
+def _build_py_for_year(_yr):
+    """Build per-project list for a specific year."""
+    _py = []
+    for p in proyectos_data:
+        _yr_dir = 0.0
+        _yr_dir_count = 0
+        for proj_csv, cert_name in csv_to_cert.items():
+            if cert_name == p['nombre']:
+                _yr_dir += dir_by_year_proj[_yr][proj_csv]['total']
+                _yr_dir_count += dir_by_year_proj[_yr][proj_csv]['count']
+        if _yr_dir == 0 and not p['has_cert']:
+            for proj_csv in directos_por_proyecto:
+                if proj_csv.upper() in p['nombre'].upper() or p['nombre'].upper() in proj_csv.upper():
+                    _yr_dir += dir_by_year_proj[_yr][proj_csv]['total']
+                    _yr_dir_count += dir_by_year_proj[_yr][proj_csv]['count']
+        _yr_mo_hrs = 0
+        _yr_mo_cost = 0.0
+        for mo_name, mo_data in mo_lookup[_yr].items():
+            mo_upper = mo_name.upper()
+            proj_upper = p['nombre'].upper()
+            if mo_upper in proj_upper or proj_upper in mo_upper:
+                _yr_mo_hrs += mo_data['horas']
+                _yr_mo_cost += mo_data['coste']
+        _yr_prr = p['prorrateo']
+        _yr_total = _yr_dir + _yr_prr + _yr_mo_cost
+        _yr_margen = p['certificacion'] - _yr_total if p['certificacion'] > 0 else -_yr_total
+        _yr_margen_pct = (_yr_margen / p['certificacion'] * 100) if p['certificacion'] > 0 else 0
+        _py.append({
+            'nombre': p['nombre'], 'certificacion': round(p['certificacion'], 2),
+            'pct': round(p['pct'], 6), 'gastos_directos': round(_yr_dir, 2),
+            'direct_count': _yr_dir_count,
+            'prorrateo': round(_yr_prr, 2), 'mano_obra_horas': _yr_mo_hrs,
+            'mano_obra_coste': round(_yr_mo_cost, 2), 'total_coste': round(_yr_total, 2),
+            'margen': round(_yr_margen, 2), 'margen_pct': round(_yr_margen_pct, 2),
+            'has_cert': p['has_cert'],
+        })
+    return _py
+
+yp_data = {}
+yp_data['todos'] = {
+    'cert': round(sum_cert, 2), 'directos': round(sum_directos, 2),
+    'prorrateo': round(sum_prorrateo, 2), 'mo': round(sum_mo, 2),
+    'horas': sum_horas, 'coste': round(sum_coste, 2), 'margen': round(sum_margen, 2),
+    'gg': round(gg_total, 2), 'veh': round(veh_total, 2),
+    'gg_count': gg_count, 'veh_count': veh_count,
+    'nfacturas': total_facturas_dir,
+    'proyectos': [{'nombre': p['nombre'], 'certificacion': round(p['certificacion'], 2), 'pct': round(p['pct'], 6), 'gastos_directos': round(p['gastos_directos'], 2), 'direct_count': p['direct_count'], 'prorrateo': round(p['prorrateo'], 2), 'mano_obra_horas': p['mano_obra_horas'], 'mano_obra_coste': round(p['mano_obra_coste'], 2), 'total_coste': round(p['total_coste'], 2), 'margen': round(p['margen'], 2), 'margen_pct': round(p['margen_pct'], 2), 'has_cert': p['has_cert']} for p in proyectos_data],
+}
+for _yr in all_years:
+    _gg = round(gg_by_year.get(_yr, 0), 2)
+    _veh = round(veh_by_year.get(_yr, 0), 2)
+    _dir = round(directos_by_year.get(_yr, 0), 2)
+    _mo = round(mo_by_year.get(_yr, {}).get('coste', 0), 2)
+    _hrs = mo_by_year.get(_yr, {}).get('horas', 0)
+    _nfact = ndirectos_by_year.get(_yr, 0)
+    _py = _build_py_for_year(_yr)
+    _cert_yr = sum(p['certificacion'] for p in _py)
+    _cost_yr = sum(p['total_coste'] for p in _py)
+    _marg_yr = sum(p['margen'] for p in _py)
+    _prr_yr = sum(p['prorrateo'] for p in _py)
+    yp_data[_yr] = {
+        'cert': round(_cert_yr, 2), 'directos': _dir, 'prorrateo': round(_prr_yr, 2),
+        'mo': _mo, 'horas': _hrs, 'coste': round(_cost_yr, 2), 'margen': round(_marg_yr, 2),
+        'gg': _gg, 'veh': _veh, 'gg_count': gg_count_by_year.get(_yr, 0),
+        'veh_count': veh_count_by_year.get(_yr, 0), 'nfacturas': _nfact,
+        'proyectos': _py,
+    }
 
 print("\n" + "="*80)
 print("RESUMEN FINAL:")
@@ -698,8 +820,8 @@ lines.append('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/js
 lines.append('<style>')
 lines.append(':root { --primary:#2B3A4E; --accent:#D4742C; --highlight:#e94560; --success:#2ecc71; --warning:#f39c12; --info:#5BA3C9; --navy:#2B4C6F; --bg-page:#F5F0E8; --bg-card:#FFFFFF; }')
 lines.append('* { margin:0; padding:0; box-sizing:border-box; }')
-lines.append("body { font-family:'Inter','Segoe UI',Tahoma,sans-serif; background:var(--bg-page); color:#2B3A4E; }")
-lines.append(".header { background:white; color:#2B3A4E; padding:20px 40px; display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid var(--accent); }")
+lines.append("body { font-family:'Inter','Segoe UI',Tahoma,sans-serif; background:var(--bg-page); color:#2B3A4E; overflow-x:hidden; }")
+lines.append(".header { background:white; color:#2B3A4E; padding:20px 40px; display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid var(--accent); position:sticky; top:0; z-index:1000; box-shadow:0 2px 8px rgba(0,0,0,0.08); }")
 lines.append(".header h1 { font-size:1.6rem; font-weight:700; color:#2B3A4E; letter-spacing:-0.5px; }")
 lines.append(".header .date { font-size:0.85rem; color:#5a6a7a; }")
 lines.append(".container { max-width:1500px; margin:0 auto; padding:24px; }")
@@ -733,6 +855,9 @@ lines.append(".tabs { display:flex; gap:4px; margin-bottom:20px; flex-wrap:wrap;
 lines.append(".tab-btn { padding:10px 20px; border:none; border-radius:0; cursor:pointer; font-size:0.85rem; font-weight:600; background:transparent; color:#5a6a7a; transition:all .2s; border-bottom:3px solid transparent; text-transform:uppercase; letter-spacing:0.5px; }")
 lines.append(".tab-btn.active { color:var(--accent); border-bottom:3px solid var(--accent); background:transparent; }")
 lines.append(".tab-btn:hover:not(.active) { color:#2B3A4E; background:#EDE9E1; }")
+lines.append(".year-btn{padding:6px 14px;border:1px solid #D5D0C8;border-radius:16px;cursor:pointer;font-size:0.75rem;font-weight:500;background:#F5F3EE;color:#5a6a7a;transition:all .2s;}")
+lines.append(".year-btn.active{background:var(--accent);color:white;border-color:var(--accent);font-weight:700;}")
+lines.append(".year-btn:hover:not(.active){border-color:var(--accent);color:#2B3A4E;}")
 lines.append(".tab-content { display:none; } .tab-content.active { display:block; }")
 lines.append(".search-box { padding:8px 14px; border:2px solid #D5D0C8; border-radius:6px; font-size:0.83rem; width:260px; outline:none; background:white; }")
 lines.append(".search-box:focus { border-color:var(--accent); }")
@@ -761,7 +886,7 @@ lines.append('  <div>')
 lines.append('    <h1>ECO STRUCT - Dashboard Financiero</h1>')
 lines.append('    <div class="date">Datos a fecha de 31/08/2026 | Gastos directos del CSV de Holded</div>')
 lines.append('  </div>')
-lines.append('  <div style="display:flex;align-items:center;gap:14px"><a href="dashboard_v2.html" style="padding:8px 16px;border:2px solid #D4742C;border-radius:6px;font-size:0.75rem;font-weight:600;background:transparent;color:#D4742C;text-decoration:none;letter-spacing:0.5px;transition:all .2s" onmouseover="this.style.background=\"#D4742C\";this.style.color=\"white\"" onmouseout="this.style.background=\"transparent\";this.style.color=\"#D4742C\"">\u25C6 Dashboard Corporativo</a><img src="' + _logo_b64 + '" alt="ECO STRUCT" style="height:50px;width:auto"><div style="text-align:right"><div style="font-size:1.25rem;font-weight:800;color:#2B3A4E;letter-spacing:0.5px">Constructive Ecosen</div><div style="font-size:1.1rem;font-weight:700;color:#5a6a7a">Spain 2.3</div></div></div>')
+lines.append('  <div style="display:flex;align-items:center;gap:14px"><a href="dashboard_v2.html" style="padding:8px 16px;border:2px solid #D4742C;border-radius:6px;font-size:0.75rem;font-weight:600;background:transparent;color:#D4742C;text-decoration:none;letter-spacing:0.5px;transition:all .2s" #D4742C\";this.style.color=\"white\"" >\u25C6 Dashboard Corporativo</a><img src="' + _logo_b64 + '" alt="ECO STRUCT" style="height:50px;width:auto"><div style="text-align:right"><div style="font-size:1.25rem;font-weight:800;color:#2B3A4E;letter-spacing:0.5px">Constructive Ecosen</div><div style="font-size:1.1rem;font-weight:700;color:#5a6a7a">Spain 2.3</div></div></div>')
 lines.append('</div>')
 
 lines.append('<div class="container">')
@@ -788,6 +913,13 @@ lines.append('  <button class="tab-btn" onclick="showTab(\'prorrateo\')">Prorrat
 lines.append('  <button class="tab-btn" onclick="showTab(\'gastosGen\')">Gastos Generales (%d+%d)</button>' % (gg_count, veh_count))
 lines.append('  <button class="tab-btn" onclick="showTab(\'manoObra\')">Mano de Obra</button>')
 lines.append('  <button class="tab-btn" onclick="showTab(\'facturasObra\')">Facturas por Obra (%d)</button>' % total_facturas_dir)
+lines.append('  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">')
+lines.append('    <span style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:1px;font-weight:600">Ano:</span>')
+lines.append('    <button class="year-btn active" onclick="switchYear(\'todos\',this)">Todos</button>')
+available_years_v1 = sorted(set(y for y in list(gg_by_year.keys()) + list(veh_by_year.keys()) + list(directos_by_year.keys()) if y))
+for _yr in available_years_v1:
+    lines.append('    <button class="year-btn" onclick="switchYear(\'%s\',this)">%s</button>' % (_yr, _yr))
+lines.append('  </div>')
 # Build project options for the PDF selector
 pdf_proj_options = '<option value="">Todas las obras</option>'
 for p in proyectos_data:
@@ -973,6 +1105,30 @@ lines.append("  var rows = document.getElementById(tableId).querySelectorAll('tb
 lines.append("  query = query.toLowerCase();")
 lines.append("  rows.forEach(row => { row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none'; });")
 lines.append("}")
+
+# Read switchYear function from external file to avoid escaping issues
+BASE_DIR = r'C:\Users\jjmax\Downloads\1'
+with open(BASE_DIR + r'\switchYear_v1.js', 'r', encoding='utf-8') as _f:
+    _switchYear_js = _f.read()
+for _jsl in _switchYear_js.split('\n'):
+    lines.append(_jsl)
+# Year filter data
+lines.append("var yearData=" + json.dumps({
+    'sumCert': {k: yp_data[k]['cert'] for k in ['todos'] + all_years},
+    'sumDirectos': {k: yp_data[k]['directos'] for k in ['todos'] + all_years},
+    'sumProrrateo': {k: yp_data[k]['prorrateo'] for k in ['todos'] + all_years},
+    'sumMO': {k: yp_data[k]['mo'] for k in ['todos'] + all_years},
+    'sumHoras': {k: yp_data[k]['horas'] for k in ['todos'] + all_years},
+    'sumCoste': {k: yp_data[k]['coste'] for k in ['todos'] + all_years},
+    'sumMargen': {k: yp_data[k]['margen'] for k in ['todos'] + all_years},
+    'ggTotal': {k: yp_data[k]['gg'] for k in ['todos'] + all_years},
+    'vehTotal': {k: yp_data[k]['veh'] for k in ['todos'] + all_years},
+    'ggCount': {k: yp_data[k]['gg_count'] for k in ['todos'] + all_years},
+    'vehCount': {k: yp_data[k]['veh_count'] for k in ['todos'] + all_years},
+    'totalFacturasDir': {k: yp_data[k]['nfacturas'] for k in ['todos'] + all_years},
+    'proyectos': {k: yp_data[k]['proyectos'] for k in ['todos'] + all_years},
+}, ensure_ascii=False, default=str) + ";")
+
 lines.append("var labels=%s;" % chart_labels)
 lines.append("var certData=%s;" % chart_cert)
 lines.append("var directData=%s;" % chart_directos)
