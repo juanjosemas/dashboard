@@ -9,8 +9,8 @@
 <style>
 :root { --primary:#2B3A4E; --accent:#D4742C; --highlight:#e94560; --success:#2ecc71; --warning:#f39c12; --info:#5BA3C9; --navy:#2B4C6F; --bg-page:#F5F0E8; --bg-card:#FFFFFF; }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Inter','Segoe UI',Tahoma,sans-serif; background:var(--bg-page); color:#2B3A4E; }
-.header { background:white; color:#2B3A4E; padding:20px 40px; display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid var(--accent); }
+body { font-family:'Inter','Segoe UI',Tahoma,sans-serif; background:var(--bg-page); color:#2B3A4E; overflow-x:hidden; }
+.header { background:white; color:#2B3A4E; padding:20px 40px; display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid var(--accent); position:sticky; top:0; z-index:1000; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
 .header h1 { font-size:1.6rem; font-weight:700; color:#2B3A4E; letter-spacing:-0.5px; }
 .header .date { font-size:0.85rem; color:#5a6a7a; }
 .container { max-width:1500px; margin:0 auto; padding:24px; }

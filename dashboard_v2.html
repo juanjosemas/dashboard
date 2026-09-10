@@ -10,8 +10,8 @@
 <style>
 :root{--bg:#0f1923;--card:#1a2632;--card2:#1e2d3d;--accent:#00d4aa;--accent2:#3b82f6;--orange:#f97316;--red:#ef4444;--yellow:#eab308;--purple:#a855f7;--cyan:#06b6d4;--text:#e2e8f0;--text2:#94a3b8;--border:#2d3d4d;--success:#22c55e;}
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
-.header{background:linear-gradient(135deg,#0f1923 0%,#1a2f42 100%);padding:16px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--accent);}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+.header{background:linear-gradient(135deg,#0f1923 0%,#1a2f42 100%);padding:16px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--accent);position:sticky;top:0;z-index:1000;box-shadow:0 4px 20px rgba(0,0,0,0.3);}
 .header h1{font-size:1.3rem;font-weight:300;color:var(--text);letter-spacing:2px;text-transform:uppercase;}
 .header h1 strong{font-weight:700;color:var(--accent);}
 .header .subtitle{font-size:0.75rem;color:var(--text2);margin-top:2px;}
