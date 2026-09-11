@@ -23,6 +23,19 @@ function switchYear(year,btn){
     kpi[4].querySelector('.kpi-value').textContent=fmtE2(marg)+' EUR';
     kpi[4].querySelector('.kpi-value').style.color=marg>=0?'#22c55e':'#ef4444';
   }
+  // Update mini stats
+  var allMiniGrids=document.querySelectorAll('[style*="grid-template-columns"]');
+  var certCount=projects.filter(function(p){return p.has_cert;}).length;
+  var lossCount=projects.filter(function(p){return p.has_cert && p.margen<0;}).length;
+  var miniVals=[(cost>0&&cert>0?(cost/cert*100).toFixed(1)+'%':'0.0%'),certCount+' / '+projects.length,lossCount+' / '+projects.length,nfact.toLocaleString('es-ES'),hrs.toLocaleString('es-ES'),projects.length.toString()];
+  allMiniGrids.forEach(function(box){
+    if(box.children.length>=5 && !box.querySelector('.kpi')){
+      for(var i=0;i<Math.min(box.children.length,miniVals.length);i++){
+        var lastDiv=box.children[i].querySelector('div:last-child');
+        if(lastDiv)lastDiv.textContent=miniVals[i];
+      }
+    }
+  });
   Object.keys(allCharts).forEach(function(k){if(allCharts[k]){allCharts[k].destroy();allCharts[k]=null;}});
   ['chartGlobalDonut','chartCostStack','chartMargenBar','chartComp','chartProrrBar','chartProrrPie'].forEach(function(id){var c=Chart.getChart(id);if(c)c.destroy();});
   var certP=projects.filter(function(p){return p.has_cert;});

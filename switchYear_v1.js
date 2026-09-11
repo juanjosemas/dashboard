@@ -9,33 +9,31 @@ function switchYear(year,btn){
   var marg=d.sumMargen[y]||0;var gg=d.ggTotal[y]||0;var veh=d.vehTotal[y]||0;
   var gc=gg+veh;var nfact=d.totalFacturasDir[y]||0;
   var projects=d.proyectos[y]||[];
-  function fmtE2(v){if(v<0)return '-'+fmtE2(-v);return Math.abs(v).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});}
-  // Update KPI cards
-  var cards=document.querySelectorAll('.kpi');
+  function fmtE2(v){if(typeof v==='string')v=parseFloat(v);if(isNaN(v))return '0,00';if(v<0)return '-'+fmtE2(-v);return Math.abs(v).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  // Update KPI cards (.kpi-card with .value and .sub)
+  var cards=document.querySelectorAll('.kpi-card');
   if(cards.length>=5){
-    cards[0].querySelector('.kpi-value').textContent=fmtE2(cert)+' EUR';
-    cards[0].querySelector('.kpi-sub').textContent=projects.filter(function(p){return p.has_cert;}).length+' proyectos';
-    cards[1].querySelector('.kpi-value').textContent=fmtE2(dir)+' EUR';
-    cards[1].querySelector('.kpi-sub').textContent=nfact+' facturas';
-    cards[2].querySelector('.kpi-value').textContent=fmtE2(gc)+' EUR';
-    cards[2].querySelector('.kpi-sub').textContent='GG '+fmtE2(gg)+' + VEH '+fmtE2(veh);
-    cards[3].querySelector('.kpi-value').textContent=fmtE2(mo)+' EUR';
-    cards[3].querySelector('.kpi-sub').textContent=hrs.toLocaleString()+' horas';
-    cards[4].querySelector('.kpi-value').textContent=fmtE2(marg)+' EUR';
-    cards[4].querySelector('.kpi-value').style.color=marg>=0?'#2ecc71':'#e94560';
+    cards[0].querySelector('.value').textContent=fmtE2(cert)+' EUR';
+    cards[0].querySelector('.sub').textContent=projects.filter(function(p){return p.has_cert;}).length+' proyectos';
+    cards[1].querySelector('.value').textContent=fmtE2(dir)+' EUR';
+    cards[1].querySelector('.sub').textContent=nfact+' facturas';
+    cards[2].querySelector('.value').textContent=fmtE2(gc)+' EUR';
+    cards[2].querySelector('.sub').textContent='GG '+fmtE2(gg)+' + VEH '+fmtE2(veh);
+    cards[3].querySelector('.value').textContent=fmtE2(mo)+' EUR';
+    cards[3].querySelector('.sub').textContent=hrs.toLocaleString('es-ES')+' horas';
+    cards[4].querySelector('.value').textContent=fmtE2(marg)+' EUR';
+    cards[4].querySelector('.value').style.color=marg>=0?'#2ecc71':'#e94560';
   }
-  // Update mini stats by label text
+  // Update mini stats - find the grid that has "Eficiencia" text
   var allBoxes=document.querySelectorAll('[style*="grid-template-columns"]');
   allBoxes.forEach(function(box){
     if(box.children.length>=5){
-      var hasKpi=box.querySelector('.kpi');
-      if(hasKpi) return; // skip KPI grid
-      // This is the mini stats grid
+      var hasKpiCard=box.querySelector('.kpi-card');
+      if(hasKpiCard) return; // skip KPI grid
       var certCount=projects.filter(function(p){return p.has_cert;}).length;
-      var lossCount=projects.filter(function(p){return !p.has_cert||p.margen<0;}).length;
-      var labels=['Eficiencia','Beneficio','Perdida','Facturas','Horas','Obras'];
-      var values=[(cost>0&&cert>0?(cost/cert*100).toFixed(1)+'%':'0.0%'),certCount.toString(),lossCount.toString(),nfact.toLocaleString(),hrs.toLocaleString()+' h',projects.length.toString()];
-      for(var i=0;i<Math.min(box.children.length,labels.length);i++){
+      var lossCount=projects.filter(function(p){return p.has_cert && p.margen<0;}).length;
+      var values=[(cost>0&&cert>0?(cost/cert*100).toFixed(1)+'%':'0.0%'),certCount.toString(),lossCount.toString(),nfact.toLocaleString('es-ES'),hrs.toLocaleString('es-ES')+' h',projects.length.toString()];
+      for(var i=0;i<Math.min(box.children.length,values.length);i++){
         var ch=box.children[i];
         var lastDiv=ch.querySelector('div:last-child');
         if(lastDiv && i<values.length) lastDiv.textContent=values[i];
