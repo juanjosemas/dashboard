@@ -93,8 +93,8 @@ lines.append('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@30
 lines.append('<style>')
 lines.append(':root{--bg:#0f1923;--card:#1a2632;--card2:#1e2d3d;--accent:#00d4aa;--accent2:#3b82f6;--orange:#f97316;--red:#ef4444;--yellow:#eab308;--purple:#a855f7;--cyan:#06b6d4;--text:#e2e8f0;--text2:#94a3b8;--border:#2d3d4d;--success:#22c55e;}')
 lines.append('*{margin:0;padding:0;box-sizing:border-box;}')
-lines.append("body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}")
-lines.append('.header{background:linear-gradient(135deg,#0f1923 0%,#1a2f42 100%);padding:16px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--accent);}')
+lines.append("body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}")
+lines.append('.header{background:linear-gradient(135deg,#0f1923 0%,#1a2f42 100%);padding:16px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--accent);position:sticky;top:0;z-index:1000;box-shadow:0 4px 20px rgba(0,0,0,0.3);}')
 lines.append('.header h1{font-size:1.3rem;font-weight:300;color:var(--text);letter-spacing:2px;text-transform:uppercase;}')
 lines.append('.header h1 strong{font-weight:700;color:var(--accent);}')
 lines.append('.header .subtitle{font-size:0.75rem;color:var(--text2);margin-top:2px;}')
@@ -223,6 +223,23 @@ lines.append('</div>')
 
 # === RESUMEN TAB ===
 lines.append('<div class="tab-content active" id="tab-resumen">')
+# Resumen detail panel (for clicking on margen bars)
+lines.append('  <div class="card" id="resumen-detail-panel" style="display:none;border:1px solid var(--accent)">')
+lines.append('    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">')
+lines.append('      <div class="card-title" style="margin:0" id="resumen-detail-title" data-nombre="">COMPOSICION</div>')
+lines.append('      <div style="display:flex;gap:6px;align-items:center">')
+lines.append('        <button onclick="pdfFromDetail()" style="background:var(--accent);color:#0f1923;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.7rem;font-weight:700">PDF Obra</button>')
+lines.append('        <button onclick="document.getElementById(\'resumen-detail-panel\').style.display=\'none\'" style="background:var(--red);color:white;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:1rem">&times;</button>')
+lines.append('      </div>')
+lines.append('    </div>')
+lines.append('    <div class="grid-2">')
+lines.append('      <div style="text-align:center"><canvas id="resumenDonut" width="300" height="300"></canvas></div>')
+lines.append('      <div>')
+lines.append('        <div id="resumen-detail-legend"></div>')
+lines.append('        <div id="resumen-detail-summary" style="margin-top:10px;font-size:0.85rem;line-height:1.6"></div>')
+lines.append('      </div>')
+lines.append('    </div>')
+lines.append('  </div>')
 lines.append('  <div class="grid-2">')
 lines.append('    <div class="card"><div class="card-title">Composicion Global de Costes</div><div style="text-align:center"><canvas id="chartGlobalDonut" width="280" height="280"></canvas></div></div>')
 lines.append('    <div class="card"><div class="card-title">Costes por Obra (clic para detalle)</div><div class="chart-box"><canvas id="chartCostStack"></canvas></div></div>')
@@ -474,6 +491,8 @@ lines.append("function filterTable(tid,q){var rows=document.getElementById(tid).
 lines.append("var detailChart=null;")
 lines.append("function showDetail(idx){var p=projectData[idx];var panel=document.getElementById('obra-detail-panel');panel.style.display='block';panel.scrollIntoView({behavior:'smooth'});document.getElementById('detail-title').setAttribute('data-nombre',p.nombre);document.getElementById('detail-title').textContent='COMPOSICION \u2014 '+p.nombre;if(detailChart){detailChart.destroy();}var ctx=document.getElementById('detailDonut').getContext('2d');detailChart=new Chart(ctx,{type:'doughnut',data:{labels:['Mano de obra','Facturas','Prorrateo'],datasets:[{data:[p.mano_obra,p.gastos_directos,p.prorrateo],backgroundColor:['%s','%s','%s'],borderWidth:3,borderColor:'%s'}]},options:{responsive:false,cutout:'55%%',plugins:{legend:{display:false}}}});var legendHtml='<div style=\"display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px\">';legendHtml+='<div><span style=\"display:inline-block;width:10px;height:10px;background:%s;border-radius:2px;margin-right:4px\"></span>Mano de obra: '+p.mano_obra.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</div>';legendHtml+='<div><span style=\"display:inline-block;width:10px;height:10px;background:%s;border-radius:2px;margin-right:4px\"></span>Facturas: '+p.gastos_directos.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</div>';legendHtml+='<div><span style=\"display:inline-block;width:10px;height:10px;background:%s;border-radius:2px;margin-right:4px\"></span>Prorrateo: '+p.prorrateo.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</div>';legendHtml+='</div>';document.getElementById('detail-legend').innerHTML=legendHtml;var mc=p.margen>=0?'%s':'%s';var cs=p.has_cert?p.certificacion.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac':'Sin certificacion';var h='<strong>CERTIFICADO</strong> '+cs+' \u2014 <strong>COSTE TOTAL</strong> '+p.total_coste.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac';h+='<br><span style=\"color:'+mc+';font-size:1.2rem;font-weight:700\">'+(p.margen>=0?'+':'')+p.margen.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</span>';h+='<br><span style=\"color:'+mc+'\">('+p.margen_pct+String.fromCharCode(37)+')</span>';document.getElementById('detail-summary').innerHTML=h;}" % (C_PURPLE, C_ACCENT2, C_ORANGE, C_BG, C_PURPLE, C_ACCENT2, C_ORANGE, C_SUCCESS, C_RED))
 lines.append("function closeDetail(){document.getElementById('obra-detail-panel').style.display='none';}")
+lines.append("var resumenChart=null;")
+lines.append("function showResumenDetail(idx){var p=projectData[idx];var panel=document.getElementById('resumen-detail-panel');panel.style.display='block';panel.scrollIntoView({behavior:'smooth'});document.getElementById('resumen-detail-title').setAttribute('data-nombre',p.nombre);document.getElementById('resumen-detail-title').textContent='COMPOSICION \u2014 '+p.nombre;if(resumenChart){resumenChart.destroy();}var ctx=document.getElementById('resumenDonut').getContext('2d');resumenChart=new Chart(ctx,{type:'doughnut',data:{labels:['Mano de obra','Facturas','Gastos generales (prorrateo)'],datasets:[{data:[p.mano_obra,p.gastos_directos,p.prorrateo],backgroundColor:['%s','%s','%s'],borderWidth:3,borderColor:'%s'}]},options:{responsive:false,cutout:'55%%',plugins:{legend:{display:false}}}});var legendHtml='<div style=\"display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px\">';legendHtml+='<div><span style=\"display:inline-block;width:10px;height:10px;background:%s;border-radius:2px;margin-right:4px\"></span>Mano de obra: '+p.mano_obra.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</div>';legendHtml+='<div><span style=\"display:inline-block;width:10px;height:10px;background:%s;border-radius:2px;margin-right:4px\"></span>Facturas: '+p.gastos_directos.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</div>';legendHtml+='<div><span style=\"display:inline-block;width:10px;height:10px;background:%s;border-radius:2px;margin-right:4px\"></span>Gastos generales (prorrateo): '+p.prorrateo.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</div>';legendHtml+='</div>';document.getElementById('resumen-detail-legend').innerHTML=legendHtml;var mc=p.margen>=0?'%s':'%s';var cs=p.has_cert?p.certificacion.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac':'Sin certificacion';var h='<strong>CERTIFICADO</strong> '+cs+' \u2014 <strong>COSTE TOTAL</strong> '+p.total_coste.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac';h+='<br><span style=\"color:'+mc+';font-size:1.2rem;font-weight:700\">'+(p.margen>=0?'+':'')+p.margen.toLocaleString('es-ES',{minimumFractionDigits:2})+' \u20ac</span>';h+='<br><span style=\"color:'+mc+'\">('+p.margen_pct+String.fromCharCode(37)+')</span>';document.getElementById('resumen-detail-summary').innerHTML=h;}" % (C_PURPLE, C_ACCENT2, C_ORANGE, C_BG, C_PURPLE, C_ACCENT2, C_ORANGE, C_SUCCESS, C_RED))
 lines.append("document.addEventListener('DOMContentLoaded',function(){var rows=document.getElementById('projTable').querySelectorAll('tbody tr');rows.forEach(function(row,i){if(!row.classList.contains('total-row')){row.style.cursor='pointer';row.addEventListener('click',function(){showDetail(i);});row.addEventListener('mouseenter',function(){row.style.background='rgba(0,212,170,0.08)';});row.addEventListener('mouseleave',function(){row.style.background='';});}});});")
 
 # Chart filter
@@ -484,7 +503,7 @@ lines.append("function clearChartFilter(){var rows=document.getElementById('fact
 _chart_bg = json.dumps(CHART_COLORS[:len(cert_projects)])
 lines.append("var gdChart=new Chart(document.getElementById('chartGlobalDonut'),{type:'doughnut',data:{labels:['Gastos Directos','Prorrateo','Mano de Obra'],datasets:[{data:[%s,%s,%s],backgroundColor:['%s','%s','%s'],borderWidth:3,borderColor:'%s'}]},options:{responsive:false,cutout:'60%%',plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:12},padding:14}}}}});" % (round(sum_directos,2), round(sum_prorrateo,2), round(sum_mo,2), C_ACCENT2, C_ORANGE, C_PURPLE, C_BG))
 lines.append("new Chart(document.getElementById('chartCostStack'),{type:'bar',data:{labels:certProjects,datasets:[{label:'Facturas directas',data:directValues,backgroundColor:'%s'},{label:'Prorrateo',data:prorrValues,backgroundColor:'%s'},{label:'Mano de Obra',data:moValues,backgroundColor:'%s'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,ticks:{color:'#94a3b8',callback:function(v){return v.toLocaleString('es-ES')}}},y:{stacked:true,ticks:{color:'#94a3b8'}}},plugins:{legend:{position:'top',labels:{color:'#94a3b8'}}}}});" % (C_ACCENT2, C_ORANGE, C_PURPLE))
-lines.append("new Chart(document.getElementById('chartMargenBar'),{type:'bar',data:{labels:certProjects,datasets:[{label:'Margen (EUR)',data:margenValues,backgroundColor:margenColors}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8',callback:function(v){return v.toLocaleString('es-ES')}}},y:{ticks:{color:'#94a3b8'}}},onClick:function(e,els){if(els.length>0){showDetail(els[0].index);}}}});")
+lines.append("new Chart(document.getElementById('chartMargenBar'),{type:'bar',data:{labels:certProjects,datasets:[{label:'Margen (EUR)',data:margenValues,backgroundColor:margenColors}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8',callback:function(v){return v.toLocaleString('es-ES')}}},y:{ticks:{color:'#94a3b8'}}},onClick:function(e,els){if(els.length>0){showResumenDetail(els[0].index);}}}});")
 lines.append("new Chart(document.getElementById('chartComp'),{type:'bar',data:{labels:certProjects,datasets:[{label:'Certificacion',data:certValues,backgroundColor:'%s'},{label:'Coste Total',data:certValues.map(function(c,i){return directValues[i]+prorrValues[i]+moValues[i];}),backgroundColor:'%s'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{color:'#94a3b8'}}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});" % (C_ACCENT2, C_ORANGE))
 lines.append("new Chart(document.getElementById('chartCertBar'),{type:'bar',data:{labels:certProjects,datasets:[{label:'Certificacion (EUR)',data:certValues,backgroundColor:certProjects.map(function(_,i){return ['%s','%s','%s','%s','%s','%s','%s','%s','%s','%s'][i%%10]}),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8',maxRotation:45}},y:{ticks:{color:'#94a3b8',callback:function(v){return v.toLocaleString('es-ES')}}}}}});" % tuple(CHART_COLORS[:10]))
 lines.append("new Chart(document.getElementById('chartProrrBar'),{type:'bar',data:{labels:certProjects,datasets:[{label:'Prorrateo (EUR)',data:prorrValues,backgroundColor:'%s'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});" % C_ORANGE)
@@ -509,22 +528,13 @@ for _jl in _switch_js.split('\n'):
         lines.append(_jl)
 _js_lines_done = True
 
-# PDF generation (extracts JS from regenerar_dashboard.py)
-import ast as _ast, re as _re, os as _os
-_v1_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'regenerar_dashboard.py')
-with open(_v1_path, 'r', encoding='utf-8') as _f:
-    _v1_lines = _f.readlines()
-for _pl in _v1_lines[1085:1320]:
-    _s = _pl.strip()
-    if not _s or _s.startswith('#'):
-        continue
-    _m = _re.match(r"lines\.append\((.+)\)", _s)
-    if _m:
-        try:
-            _content = _ast.literal_eval(_m.group(1))
-            lines.append(_content)
-        except:
-            pass
+# PDF generation (read from external pdf_func.js)
+import os as _os
+_pdf_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'pdf_func.js')
+with open(_pdf_path, 'r', encoding='utf-8') as _pf:
+    for _jl in _pf.read().splitlines():
+        if _jl.strip():
+            lines.append(_jl)
 
 lines.append('</script>')
 lines.append('</body>')
