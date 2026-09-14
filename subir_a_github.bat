@@ -29,16 +29,8 @@ if %errorlevel% neq 0 (
 )
 echo.
 
-REM -- Paso 3: Sincronizar con GitHub (pull antes de push) --
-echo [3/4] Sincronizando con GitHub...
-git stash >nul 2>&1
-git pull --rebase origin main
-git stash pop >nul 2>&1
-echo OK: Sincronizado.
-echo.
-
-REM -- Paso 4: Añadir archivos, commitear y subir --
-echo [4/4] Preparando archivos y subiendo...
+REM -- Paso 3: Añadir y commitear todos los archivos --
+echo [3/4] Añadiendo archivos...
 git add dashboard.html
 git add dashboard_v2.html
 git add pdf_func.js
@@ -49,10 +41,14 @@ git add ECO_STRUCT_Datos.xlsx
 git add README.md
 git add switchYear_v1.js
 git add switchYear.js
-git add dashboard/CERTIFICACIONES POR MESES 2026.xlsx
-git add dashboard/GASTOS MANO DE OBRA POR MESES 2026.xlsx
-git add dashboard/ECO_STRUCT_-_Workspace_Gastos.csv
+git add "dashboard/CERTIFICACIONES POR MESES 2026.xlsx"
+git add "dashboard/GASTOS MANO DE OBRA POR MESES 2026.xlsx"
+git add "dashboard/ECO_STRUCT_-_Workspace_Gastos.csv"
 git commit -m "Actualizacion del dashboard"
+echo.
+
+REM -- Paso 4: Subir a GitHub --
+echo [4/4] Subiendo a GitHub...
 git push -u origin main
 
 if %errorlevel% neq 0 (
