@@ -38,25 +38,20 @@ def extract_year(fecha):
     return None
 
 # ===== 1. CERTIFICACIONES =====
-# Read from CSV binary to handle latin-1 encoding
 certificaciones = []
-_cert_csv_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.csv'
-with open(_cert_csv_path, 'rb') as f:
-    _cert_raw = f.read()
-_cert_lines = _cert_raw.split(b'\r\n')
-for _line in _cert_lines[3:]:
-    if not _line.strip():
-        continue
-    _parts = _line.split(b';')
-    proyecto = _parts[0].decode('latin-1').strip()
+_cert_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.xlsx'
+_wb_cert = openpyxl.load_workbook(_cert_xlsx_path, data_only=True)
+_ws_cert = _wb_cert.active
+import datetime as _dt
+_cm = _dt.datetime.now().month
+for _row_idx in range(4, _ws_cert.max_row + 1):
+    proyecto = str(_ws_cert.cell(_row_idx, 1).value or '').strip()
     if not proyecto:
         continue
-    # Sum only months up to current month
-    import datetime as _dt
-    _cm = _dt.datetime.now().month
     _importe_filtrado = 0
     for _mi in range(1, _cm + 1):
-        _val = parse_euro_amount(_parts[_mi].decode('latin-1').strip() if _mi < len(_parts) else '')
+        cell_val = _ws_cert.cell(_row_idx, _mi + 1).value
+        _val = parse_euro_amount(str(cell_val)) if cell_val is not None else 0
         _importe_filtrado += _val
     if _importe_filtrado > 0 and proyecto:
         certificaciones.append({'nombre': proyecto, 'importe': _importe_filtrado})

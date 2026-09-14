@@ -38,18 +38,16 @@ def _parse_euro_amount(s):
         return 0.0
 
 cert_data = []
-_cert_csv_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.csv'
-with open(_cert_csv_path, 'rb') as f:
-    _cert_raw = f.read()
-_cert_lines = _cert_raw.split(b'\r\n')
-for _line in _cert_lines[3:]:
-    if not _line.strip():
-        continue
-    _parts = _line.split(b';')
-    _cnombre = _parts[0].decode('latin-1').strip()
+_cert_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.xlsx'
+_wb_cert = _openpyxl.load_workbook(_cert_xlsx_path, data_only=True)
+_ws_cert = _wb_cert.active
+for _row_idx in range(4, _ws_cert.max_row + 1):
+    _cnombre = str(_ws_cert.cell(_row_idx, 1).value or '').strip()
     if not _cnombre:
         continue
-    _cimporte = _parse_euro_amount(_parts[13].decode('latin-1').strip() if len(_parts) > 13 else '')
+    # Column 14 = total del año
+    _total_v = _ws_cert.cell(_row_idx, 14).value
+    _cimporte = _parse_euro_amount(str(_total_v)) if _total_v is not None else 0
     if _cimporte > 0 and _cnombre:
         cert_data.append((_cnombre, _cimporte, ""))
 
