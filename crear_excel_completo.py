@@ -49,7 +49,7 @@ for _row_idx in range(4, _ws_cert.max_row + 1):
         continue
     # Column 14 = total del año
     _total_v = _ws_cert.cell(_row_idx, 14).value
-    _cimporte = _parse_euro_amount(str(_total_v)) if _total_v is not None else 0
+    _cimporte = _parse_euro_amount(_total_v) if _total_v is not None else 0
     if _cimporte > 0 and _cnombre:
         cert_data.append((_cnombre, _cimporte, ""))
 
@@ -203,11 +203,11 @@ for _row_idx in range(4, _ws_mo.max_row + 1):
         continue
     # Columns: 1=name, 15=PRECIO/HORA, 16=SUMA HORAS, 17=GASTO TOTAL
     _tarifa_v = _ws_mo.cell(_row_idx, 15).value
-    _mp_tarifa = _parse_euro_amount(str(_tarifa_v)) if _tarifa_v is not None else 0
+    _mp_tarifa = _parse_euro_amount(_tarifa_v) if _tarifa_v is not None else 0
     _horas_v = _ws_mo.cell(_row_idx, 16).value
-    _mp_horas = int(_parse_euro_amount(str(_horas_v))) if _horas_v is not None else 0
+    _mp_horas = int(_parse_euro_amount(_horas_v)) if _horas_v is not None else 0
     _coste_v = _ws_mo.cell(_row_idx, 17).value
-    _mp_coste = _parse_euro_amount(str(_coste_v)) if _coste_v is not None else 0
+    _mp_coste = _parse_euro_amount(_coste_v) if _coste_v is not None else 0
     # If col 17 is empty (formula not evaluated), calculate from hours × tarifa
     if _mp_coste == 0 and _mp_horas > 0 and _mp_tarifa > 0:
         _mp_coste = _mp_horas * _mp_tarifa
@@ -215,7 +215,7 @@ for _row_idx in range(4, _ws_mo.max_row + 1):
     if _mp_horas == 0 and _mp_coste == 0:
         for _cmi in range(2, 14):
             _cmv = _ws_mo.cell(_row_idx, _cmi).value
-            _mp_horas += int(_parse_euro_amount(str(_cmv))) if _cmv is not None else 0
+            _mp_horas += int(_parse_euro_amount(_cmv)) if _cmv is not None else 0
         if _mp_horas > 0 and _mp_tarifa > 0:
             _mp_coste = _mp_horas * _mp_tarifa
     if _mp_horas > 0 or _mp_coste > 0:

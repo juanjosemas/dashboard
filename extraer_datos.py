@@ -54,7 +54,7 @@ for row_idx in range(4, ws_cert.max_row + 1):
     meses = {}
     for mi in range(1, CURRENT_MONTH + 1):
         cell_val = ws_cert.cell(row_idx, mi + 1).value
-        val = parse_euro_amount(str(cell_val)) if cell_val is not None else 0
+        val = parse_euro_amount(cell_val) if cell_val is not None else 0
         if val > 0:
             meses[mi] = val
             if mi not in cert_by_month:
@@ -82,17 +82,17 @@ for row_idx in range(4, ws_mo.max_row + 1):
 
     # Columns: 1=name, 15=PRECIO/HORA, 16=SUMA HORAS, 17=GASTO TOTAL
     tarifa_val = ws_mo.cell(row_idx, 15).value
-    tarifa = parse_euro_amount(str(tarifa_val)) if tarifa_val is not None else 0
+    tarifa = parse_euro_amount(tarifa_val) if tarifa_val is not None else 0
     horas_val = ws_mo.cell(row_idx, 16).value
-    horas_total = int(parse_euro_amount(str(horas_val))) if horas_val is not None else 0
+    horas_total = int(parse_euro_amount(horas_val)) if horas_val is not None else 0
     coste_val = ws_mo.cell(row_idx, 17).value
-    coste_total = parse_euro_amount(str(coste_val)) if coste_val is not None else 0
+    coste_total = parse_euro_amount(coste_val) if coste_val is not None else 0
 
     # Extract per-month hours (columns 2-13), only up to current month
     meses = {}
     for mi in range(1, CURRENT_MONTH + 1):
         cell_val = ws_mo.cell(row_idx, mi + 1).value
-        h = int(parse_euro_amount(str(cell_val))) if cell_val is not None else 0
+        h = int(parse_euro_amount(cell_val)) if cell_val is not None else 0
         if h > 0:
             meses[mi] = h
             if mi not in mo_by_month:

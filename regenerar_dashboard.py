@@ -53,7 +53,7 @@ for _row_idx in range(4, _ws_cert.max_row + 1):
     _importe_filtrado = 0
     for _mi in range(1, _cm + 1):
         cell_val = _ws_cert.cell(_row_idx, _mi + 1).value
-        _val = parse_euro_amount(str(cell_val)) if cell_val is not None else 0
+        _val = parse_euro_amount(cell_val) if cell_val is not None else 0
         _importe_filtrado += _val
     if _importe_filtrado > 0 and proyecto:
         certificaciones.append({'nombre': proyecto, 'importe': _importe_filtrado})
@@ -78,13 +78,13 @@ for _row_idx in range(4, _ws_mo.max_row + 1):
         continue
     # Columns: 1=name, 15=PRECIO/HORA, 16=SUMA HORAS, 17=GASTO TOTAL
     tarifa_val = _ws_mo.cell(_row_idx, 15).value
-    tarifa = parse_euro_amount(str(tarifa_val)) if tarifa_val is not None else 0
+    tarifa = parse_euro_amount(tarifa_val) if tarifa_val is not None else 0
     coste_total_val = _ws_mo.cell(_row_idx, 17).value
-    coste_total_col = parse_euro_amount(str(coste_total_val)) if coste_total_val is not None else 0
+    coste_total_col = parse_euro_amount(coste_total_val) if coste_total_val is not None else 0
     horas = 0
     for _mi in range(1, _cm + 1):
         cell_val = _ws_mo.cell(_row_idx, _mi + 1).value
-        horas += int(parse_euro_amount(str(cell_val))) if cell_val is not None else 0
+        horas += int(parse_euro_amount(cell_val)) if cell_val is not None else 0
     coste = horas * tarifa if tarifa > 0 else 0
     # Handle entries with no hours but with a total cost (e.g. MURO VECINO, OBRA CAMPO)
     if horas == 0 and coste == 0 and coste_total_col > 0:
