@@ -13,7 +13,9 @@ import collections
 import json
 
 def parse_euro_amount(s):
-    s = s.strip().replace('\u20ac', '').replace('\x80', '').strip()
+    if isinstance(s, (int, float)):
+        return float(s)
+    s = str(s).strip().replace('\u20ac', '').replace('\x80', '').strip()
     if re.search(r',\d{1,2}$', s):
         s = s.replace('.', '').replace(',', '.')
     elif re.search(r'\.\d{1,2}$', s):

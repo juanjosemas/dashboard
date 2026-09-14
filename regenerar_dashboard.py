@@ -13,7 +13,9 @@ import openpyxl
 
 def parse_euro_amount(s):
     """Parse European amount: handles '8875,66' and '116432.26' and '1.699,09'"""
-    s = s.strip().replace('\u20ac', '').replace('\x80', '').strip()
+    if isinstance(s, (int, float)):
+        return float(s)
+    s = str(s).strip().replace('\u20ac', '').replace('\x80', '').strip()
     # Detect format: if comma followed by 1-2 digits at end -> comma is decimal
     if re.search(r',\d{1,2}$', s):
         s = s.replace('.', '').replace(',', '.')

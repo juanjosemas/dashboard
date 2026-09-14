@@ -25,7 +25,9 @@ CSV_FILE = r'C:\Users\jjmax\Downloads\1\dashboard\ECO_STRUCT_-_Workspace_Gastos.
 # ============================================================
 def _parse_euro_amount(s):
     """Parse European amount: handles '8875,66' and '116432.26' and '1.699,09'"""
-    s = s.strip().replace('\u20ac', '').replace('\x80', '').strip()
+    if isinstance(s, (int, float)):
+        return float(s)
+    s = str(s).strip().replace('\u20ac', '').replace('\x80', '').strip()
     if re.search(r',\d{1,2}$', s):
         s = s.replace('.', '').replace(',', '.')
     elif re.search(r'\.\d{1,2}$', s):
@@ -206,6 +208,16 @@ for _row_idx in range(4, _ws_mo.max_row + 1):
     _mp_horas = int(_parse_euro_amount(str(_horas_v))) if _horas_v is not None else 0
     _coste_v = _ws_mo.cell(_row_idx, 17).value
     _mp_coste = _parse_euro_amount(str(_coste_v)) if _coste_v is not None else 0
+    # If col 17 is empty (formula not evaluated), calculate from hours × tarifa
+    if _mp_coste == 0 and _mp_horas > 0 and _mp_tarifa > 0:
+        _mp_coste = _mp_horas * _mp_tarifa
+    # If col 16 is also empty, sum monthly hours from columns 2-13
+    if _mp_horas == 0 and _mp_coste == 0:
+        for _cmi in range(2, 14):
+            _cmv = _ws_mo.cell(_row_idx, _cmi).value
+            _mp_horas += int(_parse_euro_amount(str(_cmv))) if _cmv is not None else 0
+        if _mp_horas > 0 and _mp_tarifa > 0:
+            _mp_coste = _mp_horas * _mp_tarifa
     if _mp_horas > 0 or _mp_coste > 0:
         mo_data.append((_mp_name, _mp_horas, 2026, _mp_coste))
 
