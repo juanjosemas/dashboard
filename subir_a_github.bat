@@ -41,11 +41,17 @@ REM -- Paso 4: Añadir archivos, commitear y subir --
 echo [4/4] Preparando archivos y subiendo...
 git add dashboard.html
 git add dashboard_v2.html
-git add switchYear.js
+git add pdf_func.js
+git add month_filter.js
 git add logo_ecostruct.png
 git add datos_ecostruct.json
 git add ECO_STRUCT_Datos.xlsx
 git add README.md
+git add switchYear_v1.js
+git add switchYear.js
+git add dashboard/CERTIFICACIONES POR MESES 2026.xlsx
+git add dashboard/GASTOS MANO DE OBRA POR MESES 2026.xlsx
+git add dashboard/ECO_STRUCT_-_Workspace_Gastos.csv
 git commit -m "Actualizacion del dashboard"
 git push -u origin main
 

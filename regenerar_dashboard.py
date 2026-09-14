@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Regenera dashboard.html con numeros CORRECTOS directamente del CSV y .docx
+Regenera dashboard.html con numeros CORRECTOS directamente de los CSV
 """
 import csv
 import io
@@ -9,11 +9,11 @@ import re
 import collections
 import json
 import os
-from docx import Document
+import openpyxl
 
 def parse_euro_amount(s):
     """Parse European amount: handles '8875,66' and '116432.26' and '1.699,09'"""
-    s = s.strip().replace('\u20ac', '').strip()
+    s = s.strip().replace('\u20ac', '').replace('\x80', '').strip()
     # Detect format: if comma followed by 1-2 digits at end -> comma is decimal
     if re.search(r',\d{1,2}$', s):
         s = s.replace('.', '').replace(',', '.')
@@ -38,31 +38,28 @@ def extract_year(fecha):
     return None
 
 # ===== 1. CERTIFICACIONES =====
-doc_cert = Document(r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES.docx')
-
+# Read from CSV binary to handle latin-1 encoding
 certificaciones = []
-for p in doc_cert.paragraphs:
-    text = p.text.strip()
-    if not text:
+_cert_csv_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.csv'
+with open(_cert_csv_path, 'rb') as f:
+    _cert_raw = f.read()
+_cert_lines = _cert_raw.split(b'\r\n')
+for _line in _cert_lines[3:]:
+    if not _line.strip():
         continue
-    # Find ALL euro amounts in the line and take the LAST one (the total)
-    matches = list(re.finditer(r'([\d.,]+)\s*\u20ac', text))
-    if not matches:
+    _parts = _line.split(b';')
+    proyecto = _parts[0].decode('latin-1').strip()
+    if not proyecto:
         continue
-    # Last match is the total amount
-    last_match = matches[-1]
-    importe = parse_euro_amount(last_match.group(1))
-    
-    # Project name = everything before the dashes that precede the final number
-    proyecto = text[:last_match.start()].strip()
-    # Remove trailing dashes and spaces
-    proyecto = re.sub(r'[\s\-]+$', '', proyecto).strip()
-    # Remove formula parts like "(3288,00 + 63277,34) ="
-    proyecto = re.sub(r'\([\d.,\s\+\-]+\)\s*=\s*$', '', proyecto).strip()
-    proyecto = re.sub(r'[\s\-]+$', '', proyecto).strip()
-    
-    if importe > 0 and proyecto:
-        certificaciones.append({'nombre': proyecto, 'importe': importe})
+    # Sum only months up to current month
+    import datetime as _dt
+    _cm = _dt.datetime.now().month
+    _importe_filtrado = 0
+    for _mi in range(1, _cm + 1):
+        _val = parse_euro_amount(_parts[_mi].decode('latin-1').strip() if _mi < len(_parts) else '')
+        _importe_filtrado += _val
+    if _importe_filtrado > 0 and proyecto:
+        certificaciones.append({'nombre': proyecto, 'importe': _importe_filtrado})
 
 total_cert = sum(c['importe'] for c in certificaciones)
 print("Certificaciones: %d proyectos, total %s EUR" % (len(certificaciones), "{:,.2f}".format(total_cert)))
@@ -70,52 +67,35 @@ for c in certificaciones:
     pct = c['importe'] / total_cert * 100
     print("  %-60s %s EUR (%.2f%%)" % (c['nombre'], "{:>12,.2f}".format(c['importe']), pct))
 
-# ===== 2. MANO DE OBRA (2025 + 2026) =====
-doc_mo = Document(r'C:\Users\jjmax\Downloads\1\dashboard\GASTOS MANO DE OBRA.docx')
-
-mano_obra_all = []  # ALL years combined (like the original dashboard)
-current_year = 2026
-
-for p in doc_mo.paragraphs:
-    text = p.text.strip()
-    if not text:
+# ===== 2. MANO DE OBRA =====
+# Read from CSV binary to handle latin-1 encoding
+mano_obra_all = []
+_mo_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\GASTOS MANO DE OBRA POR MESES 2026.xlsx'
+_wb_mo = openpyxl.load_workbook(_mo_xlsx_path, data_only=True)
+_ws_mo = _wb_mo.active
+import datetime as _dt
+_cm = _dt.datetime.now().month
+for _row_idx in range(4, _ws_mo.max_row + 1):
+    proyecto = str(_ws_mo.cell(_row_idx, 1).value or '').strip()
+    if not proyecto:
         continue
-    if '2025' in text:
-        current_year = 2025
-        continue
-    if '2026' in text:
-        current_year = 2026
-        continue
-    if text.startswith('GASTOS'):
-        continue
-    
-    # Normalize: replace non-ASCII chars with spaces to fix encoding artifacts
-    clean = re.sub(r'[^\x00-\x7f]+', ' ', text)
-    clean = re.sub(r'\s+', ' ', clean).strip()
-    
-    # Format 1: PROYECTO --- XXXX HORAS A 20E - TOTAL XXXX
-    # Find 'HORAS A' pattern and work backwards to extract name and hours
-    horas_match = re.search(r'(\d+)\s*HORAS?\s*A\s*(\d+).*?TOTAL\s*([\d.,]+)', clean, re.IGNORECASE)
-    if horas_match:
-        horas_val = int(horas_match.group(1))
-        tarifa_val = int(horas_match.group(2))
-        coste_val = parse_euro_amount(horas_match.group(3))
-        # Extract name: everything before the hours number
-        name_end = horas_match.start()
-        proyecto = clean[:name_end].strip()
-        # Remove trailing dashes/spaces from name
-        proyecto = re.sub(r'[\s\-]+$', '', proyecto).strip()
-        if proyecto:
-            mano_obra_all.append({'proyecto': proyecto, 'horas': horas_val, 'tarifa': tarifa_val, 'coste': coste_val, 'year': current_year})
-            continue
-    
-    # Format 2: PROYECTO --- TOTAL XXXX,XX (no hours specified)
-    match2 = re.search(r'(.+?)[\s\-]+TOTAL\s*([\d.,]+)', clean, re.IGNORECASE)
-    if match2:
-        proyecto = match2.group(1).strip()
-        coste = parse_euro_amount(match2.group(2))
-        horas = 0  # No hours specified - use coste directly
-        mano_obra_all.append({'proyecto': proyecto, 'horas': horas, 'tarifa': 0, 'coste': coste, 'year': current_year})
+    # Columns: 1=name, 15=PRECIO/HORA, 16=SUMA HORAS, 17=GASTO TOTAL
+    tarifa_val = _ws_mo.cell(_row_idx, 15).value
+    tarifa = parse_euro_amount(str(tarifa_val)) if tarifa_val is not None else 0
+    coste_total_val = _ws_mo.cell(_row_idx, 17).value
+    coste_total_col = parse_euro_amount(str(coste_total_val)) if coste_total_val is not None else 0
+    horas = 0
+    for _mi in range(1, _cm + 1):
+        cell_val = _ws_mo.cell(_row_idx, _mi + 1).value
+        horas += int(parse_euro_amount(str(cell_val))) if cell_val is not None else 0
+    coste = horas * tarifa if tarifa > 0 else 0
+    # Handle entries with no hours but with a total cost (e.g. MURO VECINO, OBRA CAMPO)
+    if horas == 0 and coste == 0 and coste_total_col > 0:
+        coste = coste_total_col
+    if horas > 0 or coste > 0:
+        if tarifa <= 0 and horas > 0 and coste > 0:
+            tarifa = coste / horas if horas > 0 else 0
+        mano_obra_all.append({'proyecto': proyecto, 'horas': horas, 'tarifa': tarifa, 'coste': round(coste, 2), 'year': 2026})
 
 total_horas_mo = sum(m['horas'] for m in mano_obra_all)
 def mo_cost(m):
@@ -158,6 +138,7 @@ for row in reader:
     fecha = ''
     codigo = ''
     estado = ''
+    proyecto_id = ''
     
     for key, val in row.items():
         if key is None:
@@ -166,6 +147,8 @@ for row in reader:
         val = val.strip() if val else ''
         if 'proyecto' == key_lower:
             proyecto = val.upper()
+        elif 'proyecto id' == key_lower:
+            proyecto_id = val.strip()
         elif 'importe' == key_lower:
             importe_str = val
         elif 't' in key_lower and 'tulo' in key_lower:
@@ -182,6 +165,14 @@ for row in reader:
     importe = parse_euro_amount(importe_str)
     yr = extract_year(fecha)
     
+    # Filter by current month
+    _f_parts = fecha.split('/') if fecha else []
+    _f_month = int(_f_parts[1]) if len(_f_parts) >= 2 and _f_parts[1].isdigit() else 0
+    import datetime as _dt
+    _current_month = _dt.datetime.now().month
+    if _f_month > _current_month:
+        continue
+    
     if 'GASTOS GENERALES' in proyecto:
         gg_total += importe
         gg_count += 1
@@ -195,6 +186,9 @@ for row in reader:
             veh_by_year[yr] += importe
             veh_count_by_year[yr] += 1
     elif proyecto:
+        # Prepend Proyecto ID if project name doesn't start with a number
+        if proyecto_id and not proyecto[0].isdigit():
+            proyecto = proyecto_id + ' - ' + proyecto
         directos_por_proyecto[proyecto]['total'] += importe
         directos_por_proyecto[proyecto]['count'] += 1
         directos_por_proyecto[proyecto]['facturas'].append({
@@ -300,13 +294,15 @@ for csv_proj, cert_mapped in csv_to_cert.items():
 
 # Collect ALL unique project names: certified + CSV without cert
 all_project_names = []
+_all_pn_set = set()
 # First: certified projects
 for cert in certificaciones:
-    all_project_names.append(cert['nombre'])
+    if cert['nombre'] not in _all_pn_set:
+        all_project_names.append(cert['nombre']); _all_pn_set.add(cert['nombre'])
 # Then: CSV projects without certification
 for csv_proj in directos_por_proyecto:
-    if csv_proj not in csv_to_cert:
-        all_project_names.append(csv_proj)
+    if csv_proj not in csv_to_cert and csv_proj not in _all_pn_set:
+        all_project_names.append(csv_proj); _all_pn_set.add(csv_proj)
 
 # Build a lookup of cert data
 cert_lookup = {c['nombre']: c for c in certificaciones}
@@ -321,11 +317,7 @@ all_display_names = [p['nombre'] for p in certificaciones]  # cert names first
 for csv_proj in directos_por_proyecto:
     if csv_proj not in csv_to_cert:
         all_display_names.append(csv_proj)
-# Add ALBERTO Y EVA if present in MO
-has_alberto = any('ALBERTO' in m['proyecto'].upper() and 'EVA' in m['proyecto'].upper() for m in mano_obra_all)
-if has_alberto:
-    all_display_names.append('ALBERTO Y EVA')
-    all_project_names.append('ALBERTO Y EVA')  # Also add to project list for consolidation
+# Note: MO-only projects are auto-detected after matching
 
 def match_mo_to_project(mo_upper, display_names):
     """Match a MO entry to a display project name."""
@@ -368,12 +360,27 @@ def match_mo_to_project(mo_upper, display_names):
             return dname
         if 'ALBERTO' in mo_upper and 'EVA' in mo_upper and 'ALBERTO' in dname_upper:
             return dname
+        if 'CAPUCHINOS' in mo_upper and 'CAPUCHINOS' in dname_upper:
+            return dname
+        if 'HUERTO' in mo_upper and 'HUERTO' in dname_upper:
+            return dname
     return None
 
 mo_to_project = {}
 for mo in mano_obra_all:
     matched_name = match_mo_to_project(mo['proyecto'].upper(), all_display_names)
     mo_to_project[id(mo)] = matched_name
+
+# Auto-create projects for unmatched MO entries
+for mo in mano_obra_all:
+    if mo_to_project.get(id(mo), None) is None:
+        mo_name = mo['proyecto']
+        if mo_name not in _all_pn_set:
+            all_project_names.append(mo_name)
+            _all_pn_set.add(mo_name)
+            all_display_names.append(mo_name)
+            mo_to_project[id(mo)] = mo_name
+            print('AUTO-PROJECT from MO: %s' % mo_name)
 
 print("\n=== MO -> Project mapping ===")
 for mo in mano_obra_all:
@@ -467,94 +474,37 @@ for m in mano_obra_all:
     mo_lookup[yk][m['proyecto']]['horas'] += m['horas']
     mo_lookup[yk][m['proyecto']]['coste'] += mo_cost(m)
 
-all_years = sorted(set(list(gg_by_year.keys()) + list(veh_by_year.keys()) + list(directos_by_year.keys()) + list(mo_by_year.keys())))
-
-# Load cert-by-year from JSON (generated by extraer_datos.py)
-_cert_by_year_proj = {}  # {(year_str, project_name): cert_value}
+# ===== YEAR DATA: SINGLE SOURCE OF TRUTH FROM JSON =====
+# Load yp_data from JSON (generated by extraer_datos.py) so both V1 and V2 use identical numbers
 try:
-    import json as _json
-    _json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'datos_ecostruct.json')
-    with open(_json_path, 'r', encoding='utf-8') as _jf:
-        _jd = json.load(_jf)
-    for _yr_key in _jd.get('available_years', []):
-        for _p in _jd.get('yp_data', {}).get(_yr_key, {}).get('proyectos', []):
-            if _p.get('certificacion', 0) > 0:
-                _cert_by_year_proj[(_yr_key, _p['nombre'])] = _p['certificacion']
-except:
-    pass
-
-def _build_py_for_year(_yr):
-    """Build per-project list for a specific year."""
-    _py = []
-    for p in proyectos_data:
-        _yr_dir = 0.0
-        _yr_dir_count = 0
-        for proj_csv, cert_name in csv_to_cert.items():
-            if cert_name == p['nombre']:
-                _yr_dir += dir_by_year_proj[_yr][proj_csv]['total']
-                _yr_dir_count += dir_by_year_proj[_yr][proj_csv]['count']
-        if _yr_dir == 0 and not p['has_cert']:
-            for proj_csv in directos_por_proyecto:
-                if proj_csv.upper() in p['nombre'].upper() or p['nombre'].upper() in proj_csv.upper():
-                    _yr_dir += dir_by_year_proj[_yr][proj_csv]['total']
-                    _yr_dir_count += dir_by_year_proj[_yr][proj_csv]['count']
-        _yr_mo_hrs = 0
-        _yr_mo_cost = 0.0
-        for mo_name, mo_data in mo_lookup[_yr].items():
-            mo_upper = mo_name.upper()
-            proj_upper = p['nombre'].upper()
-            if mo_upper in proj_upper or proj_upper in mo_upper:
-                _yr_mo_hrs += mo_data['horas']
-                _yr_mo_cost += mo_data['coste']
-        _yr_prr = p['prorrateo']
-        _yr_total = _yr_dir + _yr_prr + _yr_mo_cost
-        # Use year-specific cert if available; for specific years use 0 if missing, for 'todos' use all-time
-        if _yr == 'todos':
-            _yr_cert = p['certificacion']
-        else:
-            _yr_cert = _cert_by_year_proj.get((_yr, p['nombre']), 0)
-
-        _yr_margen = _yr_cert - _yr_total if _yr_cert > 0 else -_yr_total
-        _yr_margen_pct = (_yr_margen / _yr_cert * 100) if _yr_cert > 0 else 0
-        _py.append({
-            'nombre': p['nombre'], 'certificacion': round(_yr_cert, 2),
-            'pct': round(p['pct'], 6), 'gastos_directos': round(_yr_dir, 2),
-            'direct_count': _yr_dir_count,
-            'prorrateo': round(_yr_prr, 2), 'mano_obra_horas': _yr_mo_hrs,
-            'mano_obra_coste': round(_yr_mo_cost, 2), 'total_coste': round(_yr_total, 2),
-            'margen': round(_yr_margen, 2), 'margen_pct': round(_yr_margen_pct, 2),
-            'has_cert': p['has_cert'] and _yr_cert > 0,
-        })
-    return _py
-
-yp_data = {}
-yp_data['todos'] = {
-    'cert': round(sum_cert, 2), 'directos': round(sum_directos, 2),
-    'prorrateo': round(sum_prorrateo, 2), 'mo': round(sum_mo, 2),
-    'horas': sum_horas, 'coste': round(sum_coste, 2), 'margen': round(sum_margen, 2),
-    'gg': round(gg_total, 2), 'veh': round(veh_total, 2),
-    'gg_count': gg_count, 'veh_count': veh_count,
-    'nfacturas': total_facturas_dir,
-    'proyectos': [{'nombre': p['nombre'], 'certificacion': round(p['certificacion'], 2), 'pct': round(p['pct'], 6), 'gastos_directos': round(p['gastos_directos'], 2), 'direct_count': p['direct_count'], 'prorrateo': round(p['prorrateo'], 2), 'mano_obra_horas': p['mano_obra_horas'], 'mano_obra_coste': round(p['mano_obra_coste'], 2), 'total_coste': round(p['total_coste'], 2), 'margen': round(p['margen'], 2), 'margen_pct': round(p['margen_pct'], 2), 'has_cert': p['has_cert']} for p in proyectos_data],
-}
-for _yr in all_years:
-    _gg = round(gg_by_year.get(_yr, 0), 2)
-    _veh = round(veh_by_year.get(_yr, 0), 2)
-    _dir = round(directos_by_year.get(_yr, 0), 2)
-    _mo = round(mo_by_year.get(_yr, {}).get('coste', 0), 2)
-    _hrs = mo_by_year.get(_yr, {}).get('horas', 0)
-    _nfact = ndirectos_by_year.get(_yr, 0)
-    _py = _build_py_for_year(_yr)
-    _cert_yr = sum(p['certificacion'] for p in _py)
-    _cost_yr = sum(p['total_coste'] for p in _py)
-    _marg_yr = sum(p['margen'] for p in _py)
-    _prr_yr = sum(p['prorrateo'] for p in _py)
-    yp_data[_yr] = {
-        'cert': round(_cert_yr, 2), 'directos': _dir, 'prorrateo': round(_prr_yr, 2),
-        'mo': _mo, 'horas': _hrs, 'coste': round(_cost_yr, 2), 'margen': round(_marg_yr, 2),
-        'gg': _gg, 'veh': _veh, 'gg_count': gg_count_by_year.get(_yr, 0),
-        'veh_count': veh_count_by_year.get(_yr, 0), 'nfacturas': _nfact,
-        'proyectos': _py,
+    _json_path_yd = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'datos_ecostruct.json')
+    with open(_json_path_yd, 'r', encoding='utf-8') as _jf_yd:
+        _json_data_yd = json.load(_jf_yd)
+    all_years = _json_data_yd.get('available_years', [])
+    # Use JSON yp_data as the definitive source for ALL year-specific data
+    yp_data = _json_data_yd.get('yp_data', {})
+    # Override 'todos' with V1's own totals (calculated from CSV directly)
+    yp_data['todos'] = {
+        'cert': round(sum_cert, 2), 'directos': round(sum_directos, 2),
+        'prorrateo': round(sum_prorrateo, 2), 'mo': round(sum_mo, 2),
+        'horas': sum_horas, 'coste': round(sum_coste, 2), 'margen': round(sum_margen, 2),
+        'gg': round(gg_total, 2), 'veh': round(veh_total, 2),
+        'gg_count': gg_count, 'veh_count': veh_count,
+        'nfacturas': total_facturas_dir,
+        'proyectos': [{'nombre': p['nombre'], 'certificacion': round(p['certificacion'], 2), 'pct': round(p['pct'], 6), 'gastos_directos': round(p['gastos_directos'], 2), 'direct_count': p['direct_count'], 'prorrateo': round(p['prorrateo'], 2), 'mano_obra_horas': p['mano_obra_horas'], 'mano_obra_coste': round(p['mano_obra_coste'], 2), 'total_coste': round(p['total_coste'], 2), 'margen': round(p['margen'], 2), 'margen_pct': round(p['margen_pct'], 2), 'has_cert': p['has_cert']} for p in proyectos_data],
+    }
+except Exception as e:
+    print('WARNING: Could not load yp_data from JSON: %s' % e)
+    all_years = sorted(set(list(gg_by_year.keys()) + list(veh_by_year.keys()) + list(directos_by_year.keys()) + list(mo_by_year.keys())))
+    yp_data = {}
+    yp_data['todos'] = {
+        'cert': round(sum_cert, 2), 'directos': round(sum_directos, 2),
+        'prorrateo': round(sum_prorrateo, 2), 'mo': round(sum_mo, 2),
+        'horas': sum_horas, 'coste': round(sum_coste, 2), 'margen': round(sum_margen, 2),
+        'gg': round(gg_total, 2), 'veh': round(veh_total, 2),
+        'gg_count': gg_count, 'veh_count': veh_count,
+        'nfacturas': total_facturas_dir,
+        'proyectos': [{'nombre': p['nombre'], 'certificacion': round(p['certificacion'], 2), 'pct': round(p['pct'], 6), 'gastos_directos': round(p['gastos_directos'], 2), 'direct_count': p['direct_count'], 'prorrateo': round(p['prorrateo'], 2), 'mano_obra_horas': p['mano_obra_horas'], 'mano_obra_coste': round(p['mano_obra_coste'], 2), 'total_coste': round(p['total_coste'], 2), 'margen': round(p['margen'], 2), 'margen_pct': round(p['margen_pct'], 2), 'has_cert': p['has_cert']} for p in proyectos_data],
     }
 
 print("\n" + "="*80)
@@ -880,6 +830,9 @@ lines.append(".tab-btn.active { color:var(--accent); border-bottom:3px solid var
 lines.append(".tab-btn:hover:not(.active) { color:#2B3A4E; background:#EDE9E1; }")
 lines.append(".year-btn{padding:6px 14px;border:1px solid #D5D0C8;border-radius:16px;cursor:pointer;font-size:0.75rem;font-weight:500;background:#F5F3EE;color:#5a6a7a;transition:all .2s;}")
 lines.append(".year-btn.active{background:var(--accent);color:white;border-color:var(--accent);font-weight:700;}")
+lines.append(".month-btn{padding:4px 10px;border:1px solid #ddd;border-radius:12px;cursor:pointer;font-size:0.7rem;font-weight:500;background:#f8f9fa;color:#5a6a7a;transition:all .2s;}")
+lines.append(".month-btn.active{background:var(--accent);color:white;border-color:var(--accent);font-weight:700;}")
+lines.append(".month-btn:hover:not(.active){border-color:var(--accent);color:#2B3A4E;}")
 lines.append(".year-btn:hover:not(.active){border-color:var(--accent);color:#2B3A4E;}")
 lines.append(".tab-content { display:none; } .tab-content.active { display:block; }")
 lines.append(".search-box { padding:8px 14px; border:2px solid #D5D0C8; border-radius:6px; font-size:0.83rem; width:260px; outline:none; background:white; }")
@@ -937,12 +890,24 @@ lines.append('  <button class="tab-btn" onclick="showTab(\'gastosGen\')">Gastos 
 lines.append('  <button class="tab-btn" onclick="showTab(\'manoObra\')">Mano de Obra</button>')
 lines.append('  <button class="tab-btn" onclick="showTab(\'facturasObra\')">Facturas por Obra (%d)</button>' % total_facturas_dir)
 lines.append('  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">')
-lines.append('    <span style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:1px;font-weight:600">Ano:</span>')
-lines.append('    <button class="year-btn active" onclick="switchYear(\'todos\',this)">Todos</button>')
-available_years_v1 = sorted(set(y for y in list(gg_by_year.keys()) + list(veh_by_year.keys()) + list(directos_by_year.keys()) if y))
-for _yr in available_years_v1:
-    lines.append('    <button class="year-btn" onclick="switchYear(\'%s\',this)">%s</button>' % (_yr, _yr))
+lines.append('    <span style="font-size:0.7rem;color:#2B3A4E;font-weight:700;background:rgba(212,116,44,0.1);padding:4px 12px;border-radius:6px;border:1px solid rgba(212,116,44,0.3)">AÑo: 2026</span>')
 lines.append('  </div>')
+lines.append('</div>')
+# Month + Project selector row
+lines.append('<div style="display:flex;align-items:center;gap:6px;padding:8px 24px;background:white;border-bottom:1px solid #eee;flex-wrap:wrap">')
+lines.append('  <span style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-right:4px">Mes:</span>')
+lines.append('  <button class="month-btn active" onclick="switchMonth(\'todos\',this)" style="padding:4px 10px;border:1px solid #ddd;border-radius:12px;cursor:pointer;font-size:0.7rem;font-weight:500;background:#f8f9fa;color:#5a6a7a;transition:all .2s">Todos</button>')
+for _mi in range(1, 13):
+    _mn = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][_mi-1]
+    lines.append('  <button class="month-btn" onclick="switchMonth(%d,this)" style="padding:4px 10px;border:1px solid #ddd;border-radius:12px;cursor:pointer;font-size:0.7rem;font-weight:500;background:#f8f9fa;color:#5a6a7a;transition:all .2s">%s</button>' % (_mi, _mn))
+lines.append('  <span style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-left:12px;margin-right:4px">Obra:</span>')
+lines.append('  <select id="projectFilter" onchange="switchProject(this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.7rem;background:#f8f9fa;color:#5a6a7a;cursor:pointer;max-width:280px">')
+lines.append('    <option value="">Todas las obras</option>')
+for _p in proyectos_data:
+    lines.append('    <option value="%s">%s</option>' % (_p['nombre'].replace('"', '&quot;'), _p['nombre']))
+lines.append('  </select>')
+lines.append('  <span id="filterIndicator" style="margin-left:12px;padding:4px 12px;border-radius:6px;font-size:0.7rem;font-weight:600;background:rgba(52,152,219,0.1);color:#3498db">Todos los datos</span>')
+lines.append('</div>')
 # Build project options for the PDF selector
 pdf_proj_options = '<option value="">Todas las obras</option>'
 for p in proyectos_data:
@@ -1088,7 +1053,7 @@ lines.append('</div>')
 lines.append('<div class="tab-content" id="tab-manoObra">')
 lines.append('  <div class="section">')
 lines.append('    <div class="section-title">Mano de Obra - Desglose por Proyecto</div>')
-lines.append('    <p style="font-size:0.85rem;color:#666;margin-bottom:14px">Tarifa: 20 EUR/hora. Datos de "GASTOS MANO DE OBRA.docx" (2025 + 2026).</p>')
+lines.append('    <p style="font-size:0.85rem;color:#666;margin-bottom:14px">Tarifa: 20 EUR/hora. Datos de "GASTOS MANO DE OBRA POR MESES 2026.csv".</p>')
 lines.append('    <div class="table-wrapper"><table><thead><tr><th>Proyecto</th><th class="num">Horas</th><th class="num">Tarifa (EUR/h)</th><th class="num">Coste Total (EUR)</th></tr></thead><tbody>')
 lines.append(mo_rows)
 lines.append('    </tbody></table></div>')
@@ -1117,40 +1082,36 @@ lines.append('</div>')  # container end
 
 # JavaScript
 lines.append('<script>')
-lines.append("function showTab(id) {")
-lines.append("  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));")
-lines.append("  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));")
+# Month filter data
+md_all = {
+    'cert': round(sum_cert, 2), 'directos': round(sum_directos, 2),
+    'prorrateo': round(sum_prorrateo, 2), 'mo': round(sum_mo, 2),
+    'horas': sum_horas, 'coste': round(sum_coste, 2), 'margen': round(sum_margen, 2),
+    'gg': round(gg_total, 2), 'veh': round(veh_total, 2),
+    'gg_count': gg_count, 'veh_count': veh_count,
+    'nfacturas': total_facturas_dir, 'proyectos': proyectos_data,
+}
+lines.append("var monthlyDataAll=%s;" % json.dumps(md_all, ensure_ascii=False, default=str))
+lines.append("var monthlyData=%s;" % json.dumps({str(k): v for k, v in _json_data_yd.get('monthly_data', {}).items()}, ensure_ascii=False, default=str))
+lines.append("var monthNames=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];")
+# Read shared month filter JS
+import os as _os
+with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'month_filter.js'), 'r', encoding='utf-8') as _mf:
+    for _mfl in _mf.read().split('\n'):
+        if _mfl.strip(): lines.append(_mfl)
+lines.append("function showTab(id){")
+lines.append("  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});")
+lines.append("  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});")
 lines.append("  document.getElementById('tab-'+id).classList.add('active');")
 lines.append("  event.target.classList.add('active');")
 lines.append("}")
-lines.append("function filterTable(tableId, query) {")
-lines.append("  var rows = document.getElementById(tableId).querySelectorAll('tbody tr');")
-lines.append("  query = query.toLowerCase();")
-lines.append("  rows.forEach(row => { row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none'; });")
+lines.append("function filterTable(tableId,query){")
+lines.append("  var rows=document.getElementById(tableId).querySelectorAll('tbody tr');")
+lines.append("  query=query.toLowerCase();")
+lines.append("  rows.forEach(function(row){row.style.display=row.textContent.toLowerCase().indexOf(query)>=0?'':'none';});")
 lines.append("}")
 
-# Read switchYear function from external file to avoid escaping issues
-BASE_DIR = r'C:\Users\jjmax\Downloads\1'
-with open(BASE_DIR + r'\switchYear_v1.js', 'r', encoding='utf-8') as _f:
-    _switchYear_js = _f.read()
-for _jsl in _switchYear_js.split('\n'):
-    lines.append(_jsl)
-# Year filter data
-lines.append("var yearData=" + json.dumps({
-    'sumCert': {k: yp_data[k]['cert'] for k in ['todos'] + all_years},
-    'sumDirectos': {k: yp_data[k]['directos'] for k in ['todos'] + all_years},
-    'sumProrrateo': {k: yp_data[k]['prorrateo'] for k in ['todos'] + all_years},
-    'sumMO': {k: yp_data[k]['mo'] for k in ['todos'] + all_years},
-    'sumHoras': {k: yp_data[k]['horas'] for k in ['todos'] + all_years},
-    'sumCoste': {k: yp_data[k]['coste'] for k in ['todos'] + all_years},
-    'sumMargen': {k: yp_data[k]['margen'] for k in ['todos'] + all_years},
-    'ggTotal': {k: yp_data[k]['gg'] for k in ['todos'] + all_years},
-    'vehTotal': {k: yp_data[k]['veh'] for k in ['todos'] + all_years},
-    'ggCount': {k: yp_data[k]['gg_count'] for k in ['todos'] + all_years},
-    'vehCount': {k: yp_data[k]['veh_count'] for k in ['todos'] + all_years},
-    'totalFacturasDir': {k: yp_data[k]['nfacturas'] for k in ['todos'] + all_years},
-    'proyectos': {k: yp_data[k]['proyectos'] for k in ['todos'] + all_years},
-}, ensure_ascii=False, default=str) + ";")
+
 
 lines.append("var labels=%s;" % chart_labels)
 lines.append("var certData=%s;" % chart_cert)

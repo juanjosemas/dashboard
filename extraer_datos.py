@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Extrae todos los datos de CSV y DOCX a datos_ecostruct.json
-para que ambos dashboards (v1 y v2) usen los mismos datos.
+Extrae todos los datos de los 3 CSV a datos_ecostruct.json
+Incluye datos por mes para filtrado mensual.
+Solo trabaja con año 2026.
 """
 import csv
 import io
 import re
+import openpyxl
 import collections
 import json
-from docx import Document
 
 def parse_euro_amount(s):
-    s = s.strip().replace('\u20ac', '').strip()
+    s = s.strip().replace('\u20ac', '').replace('\x80', '').strip()
     if re.search(r',\d{1,2}$', s):
         s = s.replace('.', '').replace(',', '.')
     elif re.search(r'\.\d{1,2}$', s):
@@ -24,79 +25,101 @@ def parse_euro_amount(s):
     except:
         return 0.0
 
-def mo_cost(m):
-    if m['tarifa'] > 0:
-        return m['horas'] * m['tarifa']
-    return m['coste']
-
 BASE = r'C:\Users\jjmax\Downloads\1'
 DASH = BASE + r'\dashboard'
 
-# ===== 1. CERTIFICACIONES =====
-doc_cert = Document(DASH + r'\CERTIFICACIONES.docx')
+MONTH_NAMES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
+               'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE']
+MONTH_ES = {1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+            7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'}
+
+# Current month - only count data up to this month
+import datetime as _dt
+CURRENT_MONTH = _dt.datetime.now().month  # e.g. 9 for September
+
+# ===== 1. CERTIFICACIONES POR MESES 2026 =====
 certificaciones = []
-certificaciones_by_year = {}
-current_cert_year = ''
+cert_by_month = {}  # {month_num: {name: amount}}
+cert_xlsx_path = DASH + r'\CERTIFICACIONES POR MESES 2026.xlsx'
+wb_cert = openpyxl.load_workbook(cert_xlsx_path, data_only=True)
+ws_cert = wb_cert.active
 
-for p in doc_cert.paragraphs:
-    text = p.text.strip()
-    if not text:
+for row_idx in range(4, ws_cert.max_row + 1):
+    proyecto = str(ws_cert.cell(row_idx, 1).value or '').strip()
+    if not proyecto:
         continue
-    year_match = re.search(r'A[ÑN]O\s+(20\d{2})', text, re.IGNORECASE)
-    if year_match:
-        current_cert_year = year_match.group(1)
-        continue
-    matches = list(re.finditer(r'([\d.,]+)\s*\u20ac', text))
-    if not matches:
-        continue
-    last_match = matches[-1]
-    importe = parse_euro_amount(last_match.group(1))
-    proyecto = text[:last_match.start()].strip()
-    proyecto = re.sub(r'[\s\-]+$', '', proyecto).strip()
-    proyecto = re.sub(r'\([\d.,\s\+\-]+\)\s*=\s*$', '', proyecto).strip()
-    proyecto = re.sub(r'[\s\-]+$', '', proyecto).strip()
-    if importe > 0 and proyecto:
-        cert_entry = {'nombre': proyecto, 'importe': importe, 'year': current_cert_year}
-        certificaciones.append(cert_entry)
-        if current_cert_year not in certificaciones_by_year:
-            certificaciones_by_year[current_cert_year] = []
-        certificaciones_by_year[current_cert_year].append(cert_entry)
+    # Extract per-month values (columns 2-13), only up to current month
+    meses = {}
+    for mi in range(1, CURRENT_MONTH + 1):
+        cell_val = ws_cert.cell(row_idx, mi + 1).value
+        val = parse_euro_amount(str(cell_val)) if cell_val is not None else 0
+        if val > 0:
+            meses[mi] = val
+            if mi not in cert_by_month:
+                cert_by_month[mi] = {}
+            cert_by_month[mi][proyecto] = val
+    
+    # Use sum of months up to current month
+    importe_filtrado = sum(meses.values())
+    if importe_filtrado > 0 and proyecto:
+        certificaciones.append({'nombre': proyecto, 'importe': importe_filtrado, 'year': '2026', 'meses': meses})
+    elif proyecto:
+        certificaciones.append({'nombre': proyecto, 'importe': 0, 'year': '2026', 'meses': {}})
 
-# ===== 2. MANO DE OBRA =====
-doc_mo = Document(DASH + r'\GASTOS MANO DE OBRA.docx')
+# ===== 2. MANO DE OBRA POR MESES 2026 =====
 mano_obra_all = []
-current_year = 2026
+mo_by_month = {}  # {month_num: [{proyecto, horas, tarifa, coste}]}
+mo_xlsx_path = DASH + r'\GASTOS MANO DE OBRA POR MESES 2026.xlsx'
+wb_mo = openpyxl.load_workbook(mo_xlsx_path, data_only=True)
+ws_mo = wb_mo.active
 
-for p in doc_mo.paragraphs:
-    text = p.text.strip()
-    if not text:
+for row_idx in range(4, ws_mo.max_row + 1):
+    proyecto = str(ws_mo.cell(row_idx, 1).value or '').strip()
+    if not proyecto:
         continue
-    if '2025' in text:
-        current_year = 2025
-        continue
-    if '2026' in text:
-        current_year = 2026
-        continue
-    if text.startswith('GASTOS'):
-        continue
-    clean = re.sub(r'[^\x00-\x7f]+', ' ', text)
-    clean = re.sub(r'\s+', ' ', clean).strip()
-    horas_match = re.search(r'(\d+)\s*HORAS?\s*A\s*(\d+).*?TOTAL\s*([\d.,]+)', clean, re.IGNORECASE)
-    if horas_match:
-        horas_val = int(horas_match.group(1))
-        tarifa_val = int(horas_match.group(2))
-        coste_val = parse_euro_amount(horas_match.group(3))
-        name_end = horas_match.start()
-        proyecto = clean[:name_end].strip()
-        proyecto = re.sub(r'[\s\-]+$', '', proyecto).strip()
-        if proyecto:
-            mano_obra_all.append({'proyecto': proyecto, 'horas': horas_val, 'tarifa': tarifa_val, 'coste': coste_val, 'year': current_year})
-            continue
-    match2 = re.search(r'(.+?)[\s\-]+TOTAL\s*([\d.,]+)', clean, re.IGNORECASE)
-    if match2:
-        proyecto = match2.group(1).strip()
-        coste = parse_euro_amount(match2.group(2))
-        mano_obra_all.append({'proyecto': proyecto, 'horas': 0, 'tarifa': 0, 'coste': coste, 'year': current_year})
+
+    # Columns: 1=name, 15=PRECIO/HORA, 16=SUMA HORAS, 17=GASTO TOTAL
+    tarifa_val = ws_mo.cell(row_idx, 15).value
+    tarifa = parse_euro_amount(str(tarifa_val)) if tarifa_val is not None else 0
+    horas_val = ws_mo.cell(row_idx, 16).value
+    horas_total = int(parse_euro_amount(str(horas_val))) if horas_val is not None else 0
+    coste_val = ws_mo.cell(row_idx, 17).value
+    coste_total = parse_euro_amount(str(coste_val)) if coste_val is not None else 0
+
+    # Extract per-month hours (columns 2-13), only up to current month
+    meses = {}
+    for mi in range(1, CURRENT_MONTH + 1):
+        cell_val = ws_mo.cell(row_idx, mi + 1).value
+        h = int(parse_euro_amount(str(cell_val))) if cell_val is not None else 0
+        if h > 0:
+            meses[mi] = h
+            if mi not in mo_by_month:
+                mo_by_month[mi] = []
+            mo_coste_m = h * tarifa if tarifa > 0 else 0
+            mo_by_month[mi].append({'proyecto': proyecto, 'horas': h, 'tarifa': tarifa, 'coste': mo_coste_m})
+
+    # Calculate filtered totals (only months up to current month)
+    horas_filtradas = sum(meses.values())
+    coste_filtrado = horas_filtradas * tarifa if tarifa > 0 else 0
+    
+    # Handle entries with no hours but with a total cost (e.g. MURO VECINO, OBRA CAMPO)
+    if horas_filtradas == 0 and coste_filtrado == 0 and coste_total > 0:
+        coste_filtrado = coste_total
+        if CURRENT_MONTH > 0:
+            coste_por_mes = coste_total / CURRENT_MONTH
+            for mi in range(1, CURRENT_MONTH + 1):
+                meses[mi] = 0
+                if mi not in mo_by_month:
+                    mo_by_month[mi] = []
+                mo_by_month[mi].append({'proyecto': proyecto, 'horas': 0, 'tarifa': 0, 'coste': round(coste_por_mes, 2)})
+    
+    if horas_filtradas > 0 or coste_filtrado > 0:
+        if tarifa <= 0 and horas_filtradas > 0 and coste_filtrado > 0:
+            tarifa = coste_filtrado / horas_filtradas if horas_filtradas > 0 else 0
+        mano_obra_all.append({
+            'proyecto': proyecto, 'horas': horas_filtradas, 'tarifa': tarifa,
+            'coste': round(coste_filtrado, 2), 'year': 2026, 'meses': meses
+        })
 
 # ===== 3. CSV GASTOS =====
 csv_path = DASH + r'\ECO_STRUCT_-_Workspace_Gastos.csv'
@@ -105,16 +128,19 @@ with open(csv_path, 'r', encoding='latin-1') as f:
 
 reader = csv.DictReader(io.StringIO(content), delimiter=';')
 gg_total = 0.0; gg_count = 0; veh_total = 0.0; veh_count = 0
-gg_total_year = collections.Counter(); veh_total_year = collections.Counter()
-gg_count_year = collections.Counter(); veh_count_year = collections.Counter()
 directos_por_proyecto = collections.defaultdict(lambda: {'total': 0.0, 'count': 0, 'facturas': []})
+# Per-month tracking for gastos
+gg_by_month = collections.Counter()
+veh_by_month = collections.Counter()
+dir_by_month = collections.defaultdict(lambda: collections.defaultdict(lambda: {'total': 0.0, 'count': 0}))
 
 for row in reader:
-    proyecto = ''; importe_str = '0'; titulo = ''; proveedor = ''; fecha = ''; codigo = ''; estado = ''
+    proyecto = ''; importe_str = '0'; titulo = ''; proveedor = ''; fecha = ''; codigo = ''; estado = ''; proyecto_id = ''
     for key, val in row.items():
         if key is None: continue
         key_lower = key.lower(); val = val.strip() if val else ''
         if 'proyecto' == key_lower: proyecto = val.upper()
+        elif 'proyecto id' == key_lower: proyecto_id = val.strip()
         elif 'importe' == key_lower: importe_str = val
         elif 't' in key_lower and 'tulo' in key_lower: titulo = val
         elif 'proveedor' in key_lower and 'id' not in key_lower: proveedor = val
@@ -125,20 +151,30 @@ for row in reader:
     importe = parse_euro_amount(importe_str)
     _f_parts = fecha.split('/') if fecha else []
     _f_yr = _f_parts[2] if len(_f_parts) == 3 else ''
+    _f_month = int(_f_parts[1]) if len(_f_parts) >= 2 and _f_parts[1].isdigit() else 0
+    
+    # Skip invoices from future months
+    if _f_month > CURRENT_MONTH:
+        continue
 
     if 'GASTOS GENERALES' in proyecto:
         gg_total += importe; gg_count += 1
-        if _f_yr: gg_total_year[_f_yr] += importe; gg_count_year[_f_yr] += 1
+        if _f_month: gg_by_month[_f_month] += importe
     elif 'VEHICULOS' in proyecto or 'VEH\u00cdCULOS' in proyecto:
         veh_total += importe; veh_count += 1
-        if _f_yr: veh_total_year[_f_yr] += importe; veh_count_year[_f_yr] += 1
+        if _f_month: veh_by_month[_f_month] += importe
     elif proyecto:
+        if proyecto_id and not proyecto[0].isdigit():
+            proyecto = proyecto_id + ' - ' + proyecto
         directos_por_proyecto[proyecto]['total'] += importe
         directos_por_proyecto[proyecto]['count'] += 1
         directos_por_proyecto[proyecto]['facturas'].append({
             'codigo': codigo, 'fecha': fecha, 'titulo': titulo,
             'importe': importe, 'proveedor': proveedor, 'estado': estado
         })
+        if _f_month:
+            dir_by_month[_f_month][proyecto]['total'] += importe
+            dir_by_month[_f_month][proyecto]['count'] += 1
 
 total_gastos_comunes = gg_total + veh_total
 total_directos_csv = sum(d['total'] for d in directos_por_proyecto.values())
@@ -156,26 +192,7 @@ all_facturas_dir.sort(key=lambda x: (x['proyecto'], -abs(x['importe'])))
 for _fi in all_facturas_dir:
     _f_parts = _fi.get('fecha', '').split('/')
     _fi['year'] = _f_parts[2] if len(_f_parts) == 3 else ''
-
-directos_por_proyecto_year = {}
-for _fi in all_facturas_dir:
-    _yr = _fi.get('year', '')
-    if not _yr: continue
-    _proj = _fi.get('proyecto', '')
-    _imp = _fi.get('importe', 0)
-    if 'GASTOS GENERALES' not in _proj.upper() and 'VEHICULOS' not in _proj.upper() and 'VEH\u00cdCULOS' not in _proj.upper():
-        if _yr not in directos_por_proyecto_year:
-            directos_por_proyecto_year[_yr] = collections.defaultdict(lambda: {'total': 0.0, 'count': 0})
-        directos_por_proyecto_year[_yr][_proj]['total'] += _imp
-        directos_por_proyecto_year[_yr][_proj]['count'] += 1
-
-mo_by_year = {}
-for mo in mano_obra_all:
-    _yr = str(mo['year'])
-    if _yr not in mo_by_year: mo_by_year[_yr] = []
-    mo_by_year[_yr].append(mo)
-
-available_years = sorted(set(list(directos_por_proyecto_year.keys()) + list(mo_by_year.keys())))
+    _fi['month'] = int(_f_parts[1]) if len(_f_parts) >= 2 and _f_parts[1].isdigit() else 0
 
 # ===== 4. MAPEO CSV -> CERTIFICACIONES =====
 csv_to_cert = {}
@@ -212,6 +229,7 @@ for proj_csv in directos_por_proyecto:
         if 'LUC2' in proj_upper and 'LUC2' in cert_upper: kw = True
         if 'MEJORA DEL VALLADO' in proj_upper and 'CASTILLO' in cert_upper: kw = True
         if ('ANGEL' in proj_upper or 'NGEL' in proj_upper) and 'HELENA' in cert_upper and 'CARMEN' in proj_upper: kw = True
+        if 'HUERTO CAPUCHINOS' in proj_upper and 'HUERTO CAPUCHINOS' in cert_upper: kw = True
         if kw:
             csv_to_cert[proj_csv] = cert['nombre']; break
 
@@ -232,8 +250,12 @@ for csv_proj in directos_por_proyecto:
 cert_lookup = {}
 for c in certificaciones:
     name = c['nombre']
-    if name in cert_lookup: cert_lookup[name]['importe'] += c['importe']
-    else: cert_lookup[name] = {'nombre': name, 'importe': c['importe']}
+    if name in cert_lookup:
+        cert_lookup[name]['importe'] += c['importe']
+        for m, v in c.get('meses', {}).items():
+            cert_lookup[name].setdefault('meses', {})[m] = cert_lookup[name].get('meses', {}).get(m, 0) + v
+    else:
+        cert_lookup[name] = {'nombre': name, 'importe': c['importe'], 'meses': dict(c.get('meses', {}))}
 
 total_cert = sum(c['importe'] for c in cert_lookup.values())
 
@@ -245,10 +267,6 @@ for p in certificaciones:
 for csv_proj in directos_por_proyecto:
     if csv_proj not in csv_to_cert and csv_proj not in _adn_set:
         all_display_names.append(csv_proj); _adn_set.add(csv_proj)
-has_alberto = any('ALBERTO' in m['proyecto'].upper() and 'EVA' in m['proyecto'].upper() for m in mano_obra_all)
-if has_alberto:
-    all_display_names.append('ALBERTO Y EVA')
-    all_project_names.append('ALBERTO Y EVA')
 
 def match_mo_to_project(mo_upper, display_names):
     for dname in display_names:
@@ -268,7 +286,10 @@ def match_mo_to_project(mo_upper, display_names):
         if ('ANGEL' in mo_upper or 'NGEL' in mo_upper) and 'HELENA' in dname_upper and 'CARMEN' in mo_upper: return dname
         if 'MURO VECINO' in mo_upper and 'MURO VECINO' in dname_upper: return dname
         if 'OBRA CAMPO' in mo_upper and 'CAMPO' in dname_upper and 'ARANTXA' in dname_upper: return dname
+        if 'HELENA' in mo_upper and 'HELENA' in dname_upper: return dname
         if 'ALBERTO' in mo_upper and 'EVA' in mo_upper and 'ALBERTO' in dname_upper: return dname
+        if 'CAPUCHINOS' in mo_upper and 'CAPUCHINOS' in dname_upper: return dname
+        if 'HUERTO' in mo_upper and 'HUERTO' in dname_upper: return dname
     return None
 
 mo_to_project = {}
@@ -276,45 +297,114 @@ for mo in mano_obra_all:
     matched_name = match_mo_to_project(mo['proyecto'].upper(), all_display_names)
     mo_to_project[id(mo)] = matched_name
 
+for mo in mano_obra_all:
+    if mo_to_project.get(id(mo), None) is None:
+        mo_name = mo['proyecto']
+        if mo_name not in _all_pn_set:
+            all_project_names.append(mo_name)
+            _all_pn_set.add(mo_name)
+            all_display_names.append(mo_name)
+            _adn_set.add(mo_name)
+            mo_to_project[id(mo)] = mo_name
+
 # ===== 5. CONSOLIDAR =====
-proyectos_data = []
-for pname in all_project_names:
-    cert_data = cert_lookup.get(pname, None)
-    cert_importe = cert_data['importe'] if cert_data else 0.0
-    pct = cert_importe / total_cert if total_cert > 0 and cert_data else 0.0
-    direct_total = 0.0; direct_count = 0
-    if cert_data:
-        for csv_proj in cert_to_csvs.get(pname, []):
-            direct_total += directos_por_proyecto[csv_proj]['total']
-            direct_count += directos_por_proyecto[csv_proj]['count']
-    elif pname in directos_por_proyecto:
-        direct_total = directos_por_proyecto[pname]['total']
-        direct_count = directos_por_proyecto[pname]['count']
-    prorrateo = pct * total_gastos_comunes
-    mo_horas = 0; mo_coste = 0.0
-    for mo in mano_obra_all:
-        if mo_to_project.get(id(mo), None) == pname:
-            mo_horas += mo['horas']; mo_coste += mo_cost(mo)
-    total_coste = direct_total + prorrateo + mo_coste
-    margen = cert_importe - total_coste
-    margen_pct = (margen / cert_importe * 100) if cert_importe > 0 else 0
-    proyectos_data.append({
-        'nombre': pname, 'certificacion': cert_importe, 'pct': pct,
-        'gastos_directos': direct_total, 'direct_count': direct_count,
-        'prorrateo': prorrateo, 'mano_obra_horas': mo_horas,
-        'mano_obra_coste': mo_coste, 'total_coste': total_coste,
-        'margen': margen, 'margen_pct': margen_pct, 'has_cert': cert_data is not None,
-    })
+def mo_cost(m):
+    if m['tarifa'] > 0:
+        return m['horas'] * m['tarifa']
+    return m['coste']
 
-proyectos_data.sort(key=lambda x: (0 if x['has_cert'] else 1, -x['certificacion'] if x['has_cert'] else -x['gastos_directos']))
+def build_proyectos(certs_for_month, dir_for_month, mo_for_month, gg_yr, veh_yr, cert_names_for_month, month_num=None):
+    """Build project data for a specific month or all months."""
+    _proyectos = []
+    for pname in all_project_names:
+        cert_data = certs_for_month.get(pname, None)
+        ci = cert_data['importe'] if cert_data else 0.0
+        _pct = ci / sum(c['importe'] for c in certs_for_month.values()) if certs_for_month and ci > 0 and cert_data else 0
+        
+        dt = 0.0; dc = 0
+        if cert_data:
+            for csv_proj in cert_to_csvs.get(pname, []):
+                dt += dir_for_month.get(csv_proj, {}).get('total', 0)
+                dc += dir_for_month.get(csv_proj, {}).get('count', 0)
+        elif pname in dir_for_month:
+            dt = dir_for_month[pname]['total']
+            dc = dir_for_month[pname]['count']
+        
+        _pr = _pct * (gg_yr + veh_yr)
+        _mh = 0; _mc = 0.0
+        for _mo in mo_for_month:
+            if mo_to_project.get(id(_mo), None) == pname:
+                # Use monthly hours if month specified, else total
+                if month_num and month_num in _mo.get('meses', {}):
+                    _h = _mo['meses'][month_num]
+                    _mh += _h
+                    _mc += _h * _mo['tarifa'] if _mo['tarifa'] > 0 else 0
+                else:
+                    _mh += _mo['horas']; _mc += mo_cost(_mo)
+        _tc = dt + _pr + _mc; _mg = ci - _tc; _mp = (_mg / ci * 100) if ci > 0 else 0
+        _proyectos.append({
+            'nombre': pname, 'certificacion': round(ci, 2), 'pct': round(_pct, 6),
+            'gastos_directos': round(dt, 2), 'direct_count': dc,
+            'prorrateo': round(_pr, 2), 'mano_obra_horas': _mh,
+            'mano_obra_coste': round(_mc, 2), 'total_coste': round(_tc, 2),
+            'margen': round(_mg, 2), 'margen_pct': round(_mp, 1),
+            'has_cert': cert_data is not None and ci > 0,
+        })
+    _proyectos.sort(key=lambda x: (0 if x['has_cert'] else 1, -x['certificacion'] if x['has_cert'] else -x['gastos_directos']))
+    return _proyectos
 
-sum_cert = sum(p['certificacion'] for p in proyectos_data)
-sum_directos = sum(p['gastos_directos'] for p in proyectos_data)
-sum_prorrateo = sum(p['prorrateo'] for p in proyectos_data)
-sum_mo = sum(p['mano_obra_coste'] for p in proyectos_data)
-sum_horas = sum(p['mano_obra_horas'] for p in proyectos_data)
-sum_coste = sum(p['total_coste'] for p in proyectos_data)
-sum_margen = sum(p['margen'] for p in proyectos_data)
+# Build ALL months data
+proyectos_all = build_proyectos(cert_lookup, directos_por_proyecto, mano_obra_all, gg_total, veh_total, cert_lookup)
+
+sum_cert = sum(p['certificacion'] for p in proyectos_all)
+sum_directos = sum(p['gastos_directos'] for p in proyectos_all)
+sum_prorrateo = sum(p['prorrateo'] for p in proyectos_all)
+sum_mo = sum(p['mano_obra_coste'] for p in proyectos_all)
+sum_horas = sum(p['mano_obra_horas'] for p in proyectos_all)
+sum_coste = sum(p['total_coste'] for p in proyectos_all)
+sum_margen = sum(p['margen'] for p in proyectos_all)
+
+# Build per-month summary
+monthly_data = {}
+for mi in range(1, 13):
+    # Cert for this month
+    certs_m = {}
+    for pname in all_project_names:
+        cl = cert_lookup.get(pname, None)
+        if cl and mi in cl.get('meses', {}):
+            certs_m[pname] = {'nombre': pname, 'importe': cl['meses'][mi], 'meses': {mi: cl['meses'][mi]}}
+    
+    # Directos for this month
+    dir_m = {}
+    for pname, d in dir_by_month[mi].items():
+        dir_m[pname] = d
+    
+    # MO for this month - filter from mano_obra_all using meses field
+    mo_m = [mo for mo in mano_obra_all if mi in mo.get('meses', {})]
+    
+    # GG/VEH for this month
+    gg_m = gg_by_month.get(mi, 0)
+    veh_m = veh_by_month.get(mi, 0)
+    
+    proyectos_m = build_proyectos(certs_m, dir_m, mo_m, gg_m, veh_m, certs_m, month_num=mi)
+    
+    sc = sum(p['certificacion'] for p in proyectos_m)
+    sd = sum(p['gastos_directos'] for p in proyectos_m)
+    sp = sum(p['prorrateo'] for p in proyectos_m)
+    sm = sum(p['mano_obra_coste'] for p in proyectos_m)
+    sh = sum(p['mano_obra_horas'] for p in proyectos_m)
+    stc = sum(p['total_coste'] for p in proyectos_m)
+    sml = sum(p['margen'] for p in proyectos_m)
+    
+    monthly_data[mi] = {
+        'nombre': MONTH_ES[mi],
+        'cert': round(sc, 2), 'directos': round(sd, 2),
+        'prorrateo': round(sp, 2), 'mo': round(sm, 2),
+        'horas': sh, 'coste': round(stc, 2), 'margen': round(sml, 2),
+        'gg': round(gg_m, 2), 'veh': round(veh_m, 2),
+        'nfacturas': sum(d['count'] for d in dir_m.values()),
+        'proyectos': proyectos_m,
+    }
 
 # GG/VEH categories
 from collections import Counter
@@ -368,7 +458,6 @@ for row in reader:
     elif 'NEUMATICOS' in titulo or 'NEUM' in titulo: veh_cat_map['Neumaticos'] += importe
     else: veh_cat_map['Otros'] += importe
 
-# Top suppliers
 supplier_totals = collections.defaultdict(float)
 for f in all_facturas_dir:
     prov = f['proveedor'].strip() if f['proveedor'] else '(Sin proveedor)'
@@ -376,65 +465,6 @@ for f in all_facturas_dir:
 top10_suppliers = sorted(supplier_totals.items(), key=lambda x: -abs(x[1]))[:10]
 
 top10_proj = sorted(directos_por_proyecto.items(), key=lambda x: -abs(x[1]['total']))[:10]
-
-# Per-year data
-yp_data = {}
-yp_data['todos'] = {
-    'cert': round(sum_cert, 2), 'directos': round(sum_directos, 2),
-    'prorrateo': round(sum_prorrateo, 2), 'mo': round(sum_mo, 2),
-    'horas': sum_horas, 'coste': round(sum_coste, 2), 'margen': round(sum_margen, 2),
-    'gg': round(gg_total, 2), 'veh': round(veh_total, 2),
-    'gg_count': gg_count, 'veh_count': veh_count,
-    'nfacturas': total_facturas_dir, 'proyectos': proyectos_data,
-}
-
-for _yr_key in available_years:
-    _dir_yr = directos_por_proyecto_year.get(_yr_key, {})
-    _gg_yr = gg_total_year.get(_yr_key, 0)
-    _veh_yr = veh_total_year.get(_yr_key, 0)
-    _mo_yr = mo_by_year.get(_yr_key, [])
-    _mo_h = sum(m['horas'] for m in _mo_yr)
-    _mo_c = sum(mo_cost(m) for m in _mo_yr)
-    _certs_yr = {c['nombre']: c for c in certificaciones_by_year.get(_yr_key, [])}
-    _sum_cert_yr = sum(c['importe'] for c in _certs_yr.values())
-    _py = []
-    for _pname in all_project_names:
-        _cd = cert_lookup.get(_pname, None)
-        _ci = _certs_yr.get(_pname, {}).get('importe', 0.0) if _cd else 0.0
-        _pct = _ci / _sum_cert_yr if _sum_cert_yr > 0 and _cd else 0
-        _dt = 0.0; _dc = 0
-        if _cd:
-            for _cp in cert_to_csvs.get(_pname, []):
-                if _cp in _dir_yr: _dt += _dir_yr[_cp]['total']; _dc += _dir_yr[_cp]['count']
-        elif _pname in _dir_yr: _dt = _dir_yr[_pname]['total']; _dc = _dir_yr[_pname]['count']
-        _pr = _pct * (_gg_yr + _veh_yr)
-        _mh = 0; _mc = 0.0
-        for _mo in _mo_yr:
-            if mo_to_project.get(id(_mo), None) == _pname: _mh += _mo['horas']; _mc += mo_cost(_mo)
-        _tc = _dt + _pr + _mc; _mg = _ci - _tc; _mp = (_mg / _ci * 100) if _ci > 0 else 0
-        _py.append({
-            'nombre': _pname, 'certificacion': round(_ci, 2), 'pct': round(_pct, 6),
-            'gastos_directos': round(_dt, 2), 'direct_count': _dc,
-            'prorrateo': round(_pr, 2), 'mano_obra_horas': _mh,
-            'mano_obra_coste': round(_mc, 2), 'total_coste': round(_tc, 2),
-            'margen': round(_mg, 2), 'margen_pct': round(_mp, 1),
-            'has_cert': _cd is not None,
-        })
-    _py.sort(key=lambda x: (0 if x['has_cert'] else 1, -x['certificacion'] if x['has_cert'] else -x['gastos_directos']))
-    _cp_yr = [p for p in _py if p['has_cert']]
-    yp_data[_yr_key] = {
-        'cert': round(sum(p['certificacion'] for p in _py), 2),
-        'directos': round(sum(p['gastos_directos'] for p in _py), 2),
-        'prorrateo': round(sum(p['prorrateo'] for p in _py), 2),
-        'mo': round(sum(p['mano_obra_coste'] for p in _py), 2),
-        'horas': sum(p['mano_obra_horas'] for p in _py),
-        'coste': round(sum(p['total_coste'] for p in _py), 2),
-        'margen': round(sum(p['margen'] for p in _py), 2),
-        'gg': round(_gg_yr, 2), 'veh': round(_veh_yr, 2),
-        'gg_count': gg_count_year.get(_yr_key, 0), 'veh_count': veh_count_year.get(_yr_key, 0),
-        'nfacturas': sum(d['count'] for d in _dir_yr.values()),
-        'proyectos': _py,
-    }
 
 # Logo base64
 import base64 as _b64
@@ -446,9 +476,8 @@ _logo_buf = _io.BytesIO()
 _logo_rot.save(_logo_buf, format='PNG')
 _logo_b64 = 'data:image/png;base64,' + _b64.b64encode(_logo_buf.getvalue()).decode()
 
-# Save all data
 output = {
-    'proyectos_data': proyectos_data,
+    'proyectos_data': proyectos_all,
     'sum_cert': round(sum_cert, 2),
     'sum_directos': round(sum_directos, 2),
     'sum_prorrateo': round(sum_prorrateo, 2),
@@ -468,8 +497,8 @@ output = {
     'top10_suppliers': [{'name': s[0], 'total': round(abs(s[1]), 2)} for s in top10_suppliers],
     'top10_proj': [{'name': p[0], 'total': round(abs(p[1]['total']), 2)} for p in top10_proj],
     'mano_obra_all': mano_obra_all,
-    'available_years': available_years,
-    'yp_data': yp_data,
+    'available_years': ['2026'],
+    'monthly_data': monthly_data,
     'logo_b64': _logo_b64,
 }
 
@@ -481,4 +510,5 @@ print("  Certificaciones: {:,.2f} EUR".format(sum_cert))
 print("  Gastos Directos: {:,.2f} EUR".format(sum_directos))
 print("  Gastos Comunes:  {:,.2f} EUR".format(total_gastos_comunes))
 print("  Mano de Obra:    {:,.2f} EUR ({} horas)".format(sum_mo, sum_horas))
-print("  MARGEN:          {:,.2f} EUR ({:.1f}%)".format(sum_margen, sum_margen/sum_cert*100 if sum_cert > 0 else 0))
+print("  MARGEN:          {:,.2f} EUR".format(sum_margen))
+print("  Meses disponibles: {}".format(list(monthly_data.keys())))

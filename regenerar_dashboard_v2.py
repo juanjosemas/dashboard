@@ -35,7 +35,6 @@ top10_suppliers = data['top10_suppliers']
 top10_proj = data['top10_proj']
 mano_obra_all = data['mano_obra_all']
 available_years = data['available_years']
-yp_data = data['yp_data']
 logo_b64 = data['logo_b64']
 
 # Format helpers
@@ -142,6 +141,9 @@ lines.append('#projTable .progress-bar{height:3px;margin-top:2px;}')
 lines.append('.year-btn{padding:6px 14px;border:1px solid var(--border);border-radius:16px;cursor:pointer;font-size:0.75rem;font-weight:500;background:var(--card2);color:var(--text2);transition:all .2s;}')
 lines.append('.year-btn.active{background:var(--accent);color:#0f1923;border-color:var(--accent);font-weight:700;}')
 lines.append('.year-btn:hover:not(.active){border-color:var(--accent);color:var(--text);}')
+lines.append('.month-btn{padding:4px 10px;border:1px solid var(--border);border-radius:12px;cursor:pointer;font-size:0.7rem;font-weight:500;background:var(--card2);color:var(--text2);transition:all .2s;}')
+lines.append('.month-btn.active{background:var(--accent);color:#0f1923;border-color:var(--accent);font-weight:700;}')
+lines.append('.month-btn:hover:not(.active){border-color:var(--accent);color:var(--text);}')
 lines.append('.switch-link{padding:8px 18px;border:1px solid var(--accent);border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:600;background:transparent;color:var(--accent);text-decoration:none;transition:all .2s;letter-spacing:0.5px;}')
 lines.append('.switch-link:hover{background:var(--accent);color:#0f1923;}')
 lines.append('.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.65rem;font-weight:600;}')
@@ -203,14 +205,26 @@ lines.append('  <button class="tab-btn" onclick="showTab(\'prorrateo\')">Prorrat
 lines.append('  <button class="tab-btn" onclick="showTab(\'gastosGen\')">Gastos Comunes (%d+%d)</button>' % (gg_count, veh_count))
 lines.append('  <button class="tab-btn" onclick="showTab(\'manoObra\')">Mano de Obra</button>')
 lines.append('  <button class="tab-btn" onclick="showTab(\'facturasObra\')">Facturas por Obra (%d)</button>' % total_facturas_dir)
-# Year selector + PDF
+# Year label + PDF
 lines.append('  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">')
-lines.append('    <span style="font-size:0.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Ano:</span>')
-for _yr_btn in ['todos'] + available_years:
-    act = ' active' if _yr_btn == 'todos' else ''
-    label = 'Todos' if _yr_btn == 'todos' else _yr_btn
-    lines.append('    <button class="year-btn%s" onclick="switchYear(\'%s\',this)">%s</button>' % (act, _yr_btn, label))
+lines.append('    <span style="font-size:0.7rem;color:var(--text);font-weight:700;background:rgba(212,116,44,0.1);padding:4px 12px;border-radius:6px;border:1px solid rgba(212,116,44,0.3)">A\u00d1o: 2026</span>')
 lines.append('  </div>')
+lines.append('</div>')
+# Month + Project selector row
+lines.append('<div style="display:flex;align-items:center;gap:6px;padding:8px 24px;background:var(--card);border-bottom:1px solid var(--border);flex-wrap:wrap">')
+lines.append('  <span style="font-size:0.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-right:4px">Mes:</span>')
+lines.append('  <button class="month-btn active" onclick="switchMonth(\'todos\',this)">Todos</button>')
+for _mi in range(1, 13):
+    _mn = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][_mi-1]
+    lines.append('  <button class="month-btn" onclick="switchMonth(%d,this)">%s</button>' % (_mi, _mn))
+lines.append('  <span style="font-size:0.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-left:12px;margin-right:4px">Obra:</span>')
+lines.append('  <select id="projectFilter" onchange="switchProject(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.7rem;background:var(--card2);color:var(--text2);cursor:pointer;max-width:280px">')
+lines.append('    <option value="">Todas las obras</option>')
+for _p in proyectos_data:
+    lines.append('    <option value="%s">%s</option>' % (_p['nombre'].replace('"', '&quot;'), _p['nombre']))
+lines.append('  </select>')
+lines.append('  <span id="filterIndicator" style="margin-left:12px;padding:4px 12px;border-radius:6px;font-size:0.7rem;font-weight:600;background:rgba(52,152,219,0.1);color:#3498db">Todos los datos</span>')
+lines.append('</div>')
 lines.append('  <div style="margin-left:8px;display:flex;gap:6px;align-items:center">')
 lines.append('    <select id="pdfProjectSelect" style="padding:6px 8px;border:1px solid var(--accent);border-radius:4px;font-size:0.75rem;background:var(--card2);color:var(--text);max-width:200px">')
 lines.append('      <option value="">Todas las obras</option>')
@@ -439,22 +453,24 @@ lines.append('</div>')  # container end
 # === JAVASCRIPT ===
 lines.append('<script>')
 
-# Embed year data
-lines.append("var yearData=" + json.dumps({
-    'sumCert': {k: yp_data[k]['cert'] for k in ['todos'] + available_years},
-    'sumDirectos': {k: yp_data[k]['directos'] for k in ['todos'] + available_years},
-    'sumProrrateo': {k: yp_data[k]['prorrateo'] for k in ['todos'] + available_years},
-    'sumMO': {k: yp_data[k]['mo'] for k in ['todos'] + available_years},
-    'sumHoras': {k: yp_data[k]['horas'] for k in ['todos'] + available_years},
-    'sumCoste': {k: yp_data[k]['coste'] for k in ['todos'] + available_years},
-    'sumMargen': {k: yp_data[k]['margen'] for k in ['todos'] + available_years},
-    'ggTotal': {k: yp_data[k]['gg'] for k in ['todos'] + available_years},
-    'vehTotal': {k: yp_data[k]['veh'] for k in ['todos'] + available_years},
-    'ggCount': {k: yp_data[k]['gg_count'] for k in ['todos'] + available_years},
-    'vehCount': {k: yp_data[k]['veh_count'] for k in ['todos'] + available_years},
-    'totalFacturasDir': {k: yp_data[k]['nfacturas'] for k in ['todos'] + available_years},
-    'proyectos': {k: yp_data[k]['proyectos'] for k in ['todos'] + available_years},
-}, ensure_ascii=False, default=str) + ";")
+# Month filter data
+md_all = {
+    'cert': round(sum_cert, 2), 'directos': round(sum_directos, 2),
+    'prorrateo': round(sum_prorrateo, 2), 'mo': round(sum_mo, 2),
+    'horas': sum_horas, 'coste': round(sum_coste, 2), 'margen': round(sum_margen, 2),
+    'gg': round(gg_total, 2), 'veh': round(veh_total, 2),
+    'gg_count': gg_count, 'veh_count': veh_count,
+    'nfacturas': total_facturas_dir, 'proyectos': proyectos_data,
+}
+lines.append("var monthlyDataAll=%s;" % json.dumps(md_all, ensure_ascii=False, default=str))
+lines.append("var monthlyData=%s;" % json.dumps({str(k): v for k, v in data.get('monthly_data', {}).items()}, ensure_ascii=False, default=str))
+lines.append("var monthNames=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];")
+# Read shared month filter JS
+with open(BASE + r'\month_filter.js', 'r', encoding='utf-8') as _mf:
+    for _mfl in _mf.read().split('\n'):
+        if _mfl.strip(): lines.append(_mfl)
+# Override switchMonth to use V2 selectors
+lines.append("switchMonth = switchMonthV2;")
 
 # Chart data
 lines.append("var projectData=%s;" % json.dumps([{
@@ -518,15 +534,6 @@ top_proj_labels = json.dumps([p['name'][:30] for p in top10_proj], ensure_ascii=
 top_proj_values = json.dumps([p['total'] for p in top10_proj])
 lines.append("new Chart(document.getElementById('chartTopProv'),{type:'bar',data:{labels:%s,datasets:[{label:'Importe Total',data:%s,backgroundColor:['%s','%s','%s','%s','%s','%s','%s','%s','%s','%s']}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},onClick:function(e,els){if(els.length>0){filterByChart('prov',els[0].index);}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});" % (top_prov_labels, top_prov_values, *CHART_COLORS[:10]))
 lines.append("new Chart(document.getElementById('chartTopProj'),{type:'bar',data:{labels:%s,datasets:[{label:'Gastos Directos',data:%s,backgroundColor:['%s','%s','%s','%s','%s','%s','%s','%s','%s','%s']}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},onClick:function(e,els){if(els.length>0){filterByChart('proj',els[0].index);}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});" % (top_proj_labels, top_proj_values, *CHART_COLORS[:10]))
-
-# Year switching
-# Year switching JS - read from external file to avoid escaping issues
-with open(BASE + r'\switchYear.js', 'r', encoding='utf-8') as _f:
-    _switch_js = _f.read()
-for _jl in _switch_js.split('\n'):
-    if _jl.strip():
-        lines.append(_jl)
-_js_lines_done = True
 
 # PDF generation (read from external pdf_func.js)
 import os as _os

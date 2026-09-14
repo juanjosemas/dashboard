@@ -7,6 +7,7 @@ import csv
 import io
 import os
 import re
+import openpyxl as _openpyxl
 
 try:
     import openpyxl
@@ -20,20 +21,11 @@ from openpyxl.utils import get_column_letter
 CSV_FILE = r'C:\Users\jjmax\Downloads\1\dashboard\ECO_STRUCT_-_Workspace_Gastos.xlsx'
 
 # ============================================================
-# CERTIFICACIONES - Leido desde .docx (se actualiza automaticamente)
+# CERTIFICACIONES - Leido desde CSV
 # ============================================================
-try:
-    from docx import Document as _DocCert
-except ImportError:
-    os.system("pip install python-docx")
-    from docx import Document as _DocCert
-
-_cert_docx_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES.docx'
-_cert_doc = _DocCert(_cert_docx_path)
-
 def _parse_euro_amount(s):
     """Parse European amount: handles '8875,66' and '116432.26' and '1.699,09'"""
-    s = s.strip().replace('€', '').strip()
+    s = s.strip().replace('\u20ac', '').replace('\x80', '').strip()
     if re.search(r',\d{1,2}$', s):
         s = s.replace('.', '').replace(',', '.')
     elif re.search(r'\.\d{1,2}$', s):
@@ -46,20 +38,18 @@ def _parse_euro_amount(s):
         return 0.0
 
 cert_data = []
-for _cp in _cert_doc.paragraphs:
-    _ct = _cp.text.strip()
-    if not _ct:
+_cert_csv_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.csv'
+with open(_cert_csv_path, 'rb') as f:
+    _cert_raw = f.read()
+_cert_lines = _cert_raw.split(b'\r\n')
+for _line in _cert_lines[3:]:
+    if not _line.strip():
         continue
-    # Find euro amounts
-    _cmatches = list(re.finditer(r'([\d.,]+)\s*€', _ct))
-    if not _cmatches:
+    _parts = _line.split(b';')
+    _cnombre = _parts[0].decode('latin-1').strip()
+    if not _cnombre:
         continue
-    _clast = _cmatches[-1]
-    _cimporte = _parse_euro_amount(_clast.group(1))
-    _cnombre = _ct[:_clast.start()].strip()
-    _cnombre = re.sub(r'[\s\-]+$', '', _cnombre).strip()
-    _cnombre = re.sub(r'\([\d.,\s\+\-]+\)\s*=\s*$', '', _cnombre).strip()
-    _cnombre = re.sub(r'[\s\-]+$', '', _cnombre).strip()
+    _cimporte = _parse_euro_amount(_parts[13].decode('latin-1').strip() if len(_parts) > 13 else '')
     if _cimporte > 0 and _cnombre:
         cert_data.append((_cnombre, _cimporte, ""))
 
@@ -128,7 +118,10 @@ def map_mo_name(mo_name):
         if 'CEMENTERIO' in mu and 'CEMENTERIO' in nu: return cname
         if 'PEREAMAR' in mu and 'PEREAMAR' in nu: return cname
         if 'CARTAGENA' in mu and 'CARTAGENA' in nu: return cname
+        if 'HELENA' in mu and 'HELENA' in nu: return cname
         if ('ANGEL' in mu or 'NGEL' in mu) and 'HELENA' in nu and 'CARMEN' in mu: return cname
+        if 'CAPUCHINOS' in mu and 'CAPUCHINOS' in nu: return cname
+        if 'HUERTO' in mu and 'HUERTO' in nu: return cname
     return mo_name
 
 # ============================================================
@@ -147,13 +140,13 @@ facturas_por_obra = []  # all individual invoices (excluding GG/VEH)
 
 for row in reader:
     proyecto = row.get('Proyecto', '').strip()
+    proyecto_id = row.get('Proyecto ID', '').strip()
     importe_str = row.get('Importe', '0').strip()
     cod = row.get('C\u00f3digo', row.get('Codigo', '')).strip()
-    fecha = row.get('Fecha de imputaci\u00f3n', '').strip()
+    fecha = row.get('Fecha', '').strip()
     titulo = row.get('T\u00edtulo', '').strip()
     proveedor = row.get('Proveedor', '').strip()
     estado = row.get('Estado', '').strip()
-
     if importe_str:
         importe_str = importe_str.replace('.', '').replace(',', '.')
     try:
@@ -163,11 +156,15 @@ for row in reader:
 
     entry = {'cod': cod, 'fecha': fecha, 'titulo': titulo, 'proveedor': proveedor, 'importe': importe, 'proyecto': proyecto, 'estado': estado}
 
-    if proyecto == 'GASTOS GENERALES':
+    if 'GASTOS GENERALES' in proyecto:
         gg_entries.append(entry)
-    elif proyecto == 'VEHICULOS':
+    elif 'VEHICULOS' in proyecto or 'VEH' in proyecto.upper():
         vh_entries.append(entry)
     elif proyecto and proyecto not in ('', 'GASTOS GENERALES', 'VEHICULOS'):
+        # Prepend Proyecto ID if project name doesn't start with a number
+        if proyecto_id and proyecto and not proyecto[0].isdigit():
+            proyecto = proyecto_id + ' - ' + proyecto
+            entry['proyecto'] = proyecto
         # Map to certification names
         mapped = proyecto
         gastos_directos[mapped] = gastos_directos.get(mapped, 0) + importe
@@ -194,60 +191,28 @@ for entry in facturas_por_obra:
     entry['proyecto'] = map_csv_to_cert(entry['proyecto'])
 
 # ============================================================
-# MANO DE OBRA - Leido desde .docx (se actualiza automaticamente)
+# MANO DE OBRA - Leido desde CSV
 # ============================================================
-try:
-    from docx import Document as _DocMO
-except ImportError:
-    os.system("pip install python-docx")
-    from docx import Document as _DocMO
-
-_mo_docx_path = r'C:\Users\jjmax\Downloads\1\dashboard\GASTOS MANO DE OBRA.docx'
-_mo_doc = _DocMO(_mo_docx_path)
-
-import re as _re_mo
-
 mo_data = []
-_current_year = 2026  # Default year
-for _mp in _mo_doc.paragraphs:
-    _mt = _mp.text.strip()
-    if not _mt:
+_mo_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\GASTOS MANO DE OBRA POR MESES 2026.xlsx'
+_wb_mo = _openpyxl.load_workbook(_mo_xlsx_path, data_only=True)
+_ws_mo = _wb_mo.active
+for _row_idx in range(4, _ws_mo.max_row + 1):
+    _mp_name = str(_ws_mo.cell(_row_idx, 1).value or '').strip()
+    if not _mp_name:
         continue
-    # Normalize: strip non-ASCII (euro signs, em-dashes, etc.) like dashboard does
-    _mt = _re_mo.sub(r'[^\x00-\x7f]+', ' ', _mt)
-    _mt = _re_mo.sub(r'\s+', ' ', _mt).strip()
-    if not _mt:
-        continue
-    # Detect year headers
-    _year_match = _re_mo.search(r'(20\d{2})', _mt)
-    if 'ANO' in _mt.upper() or _mt.upper().startswith('GASTOS'):
-        if _year_match:
-            _current_year = int(_year_match.group(1))
-        continue
-    # Format 1: NAME --- HOURS HORAS A 20E - TOTAL XXXX
-    _line_match = _re_mo.search(r'(\d+)\s*HORAS', _mt, _re_mo.IGNORECASE)
-    if _line_match:
-        _mhours = int(_line_match.group(1))
-        _name_part = _mt[:_line_match.start()].strip().rstrip('-').rstrip().strip()
-        _name_part = _re_mo.sub(r'[\s\-]+$', '', _name_part).strip()
-        if _name_part:
-            mo_data.append((_name_part, _mhours, _current_year, 0))  # cost=0 means use hours*20
-        continue
-    # Format 2: NAME --- TOTAL XXXX (no hours, just cost)
-    _fmt2 = _re_mo.search(r'(.+?)[\s\-]+TOTAL\s*([\d.,]+)', _mt, _re_mo.IGNORECASE)
-    if _fmt2:
-        _name2 = _fmt2.group(1).strip().rstrip('-').strip()
-        _name2 = _re_mo.sub(r'[\s\-]+$', '', _name2).strip()
-        _coste2 = _fmt2.group(2).replace('.', '').replace(',', '.')
-        try:
-            _coste2 = float(_coste2)
-        except:
-            _coste2 = 0.0
-        if _name2 and _coste2 > 0:
-            mo_data.append((_name2, 0, _current_year, _coste2))  # 0 hours, cost explicit
+    # Columns: 1=name, 15=PRECIO/HORA, 16=SUMA HORAS, 17=GASTO TOTAL
+    _tarifa_v = _ws_mo.cell(_row_idx, 15).value
+    _mp_tarifa = _parse_euro_amount(str(_tarifa_v)) if _tarifa_v is not None else 0
+    _horas_v = _ws_mo.cell(_row_idx, 16).value
+    _mp_horas = int(_parse_euro_amount(str(_horas_v))) if _horas_v is not None else 0
+    _coste_v = _ws_mo.cell(_row_idx, 17).value
+    _mp_coste = _parse_euro_amount(str(_coste_v)) if _coste_v is not None else 0
+    if _mp_horas > 0 or _mp_coste > 0:
+        mo_data.append((_mp_name, _mp_horas, 2026, _mp_coste))
 
 if not mo_data:
-    print("WARNING: No mano de obra data found in .docx")
+    print("WARNING: No mano de obra data found in XLSX")
     mo_data = []
 
 # ============================================================
