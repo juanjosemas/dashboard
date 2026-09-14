@@ -38,6 +38,9 @@ echo.
 echo OK: Dashboard v1 actualizado.
 echo.
 
+echo Generando pdf_func.js desde v1...
+python -c "f=open('dashboard.html','r',encoding='utf-8');c=f.read();f.close();s=c.find('function generatePDF(){');e=c.find('</script>',s);so=c.rfind('<script>',0,s);js=c[so+8:e];ls=[l.rstrip() for l in js.split(chr(10)) if l.strip()];open('pdf_func.js','w',encoding='utf-8').write(chr(10).join(ls));print('OK: pdf_func.js actualizado -',len(ls),'lineas')"
+
 python regenerar_dashboard_v2.py
 
 echo OK: Dashboard v2 actualizado.

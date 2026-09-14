@@ -829,7 +829,7 @@ lines.append(".year-btn{padding:6px 14px;border:1px solid #D5D0C8;border-radius:
 lines.append(".year-btn.active{background:var(--accent);color:white;border-color:var(--accent);font-weight:700;}")
 lines.append(".month-btn{padding:4px 10px;border:1px solid #ddd;border-radius:12px;cursor:pointer;font-size:0.7rem;font-weight:500;background:#f8f9fa;color:#5a6a7a;transition:all .2s;}")
 lines.append(".month-btn.active{background:var(--accent);color:white;border-color:var(--accent);font-weight:700;}")
-lines.append(".month-btn:hover:not(.active){border-color:var(--accent);color:#2B3A4E;}")
+lines.append(".month-btn:hover:not(.active){border-color:var(--accent);color:#2B3A4E;background:rgba(212,116,44,0.12);box-shadow:0 0 0 3px rgba(212,116,44,0.15);transform:scale(1.08);}")
 lines.append(".year-btn:hover:not(.active){border-color:var(--accent);color:#2B3A4E;}")
 lines.append(".tab-content { display:none; } .tab-content.active { display:block; }")
 lines.append(".search-box { padding:8px 14px; border:2px solid #D5D0C8; border-radius:6px; font-size:0.83rem; width:260px; outline:none; background:white; }")
