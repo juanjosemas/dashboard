@@ -232,24 +232,35 @@ function initMultiSelect() {
     projectList = monthlyDataAll.proyectos.map(function(p) { return p.nombre; });
     projectList.sort();
     
+    // Detect dark theme (V2) - check CSS variable or dark background
+    var bodyBg = getComputedStyle(document.body).backgroundColor;
+    var isDark = document.body.classList.contains('dark-theme') || document.body.getAttribute('data-theme') === 'dark' || bodyBg === 'rgb(15, 25, 35)' || bodyBg === 'rgb(15, 23, 42)' || (bodyBg.match(/rgb/) && parseInt(bodyBg.split(',')[1]) < 50);
+    var bg = isDark ? '#1e293b' : 'white';
+    var bg2 = isDark ? '#0f172a' : '#fafafa';
+    var border = isDark ? '#334155' : '#ddd';
+    var text = isDark ? '#e2e8f0' : '#333';
+    var text2 = isDark ? '#94a3b8' : '#666';
+    var hoverBg = isDark ? '#334155' : '#f5f5f5';
+    var accent = '#D4742C';
+    
     // Build the multi-select HTML
     var html = '';
     html += '<div class="ms-wrapper" style="position:relative;display:inline-block;">';
-    html += '<div class="ms-trigger" id="msTrigger" onclick="toggleMultiSelect()" style="cursor:pointer;padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:white;font-size:0.8rem;display:flex;align-items:center;gap:8px;min-width:200px;justify-content:space-between;transition:all .2s;">';
+    html += '<div class="ms-trigger" id="msTrigger" onclick="toggleMultiSelect()" style="cursor:pointer;padding:6px 14px;border:1px solid ' + border + ';border-radius:6px;background:' + bg + ';font-size:0.8rem;color:' + text + ';display:flex;align-items:center;gap:8px;min-width:320px;justify-content:space-between;transition:all .2s;">';
     html += '<span id="msLabel">Todas las obras (' + projectList.length + ')</span>';
-    html += '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 5L6 8L9 5" stroke="#666" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    html += '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 5L6 8L9 5" stroke="' + text2 + '" stroke-width="1.5" stroke-linecap="round"/></svg>';
     html += '</div>';
-    html += '<div class="ms-panel" id="msPanel" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;max-height:320px;overflow:hidden;">';
+    html += '<div class="ms-panel" id="msPanel" style="display:none;position:absolute;top:100%;left:0;min-width:400px;background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.25);z-index:1000;max-height:320px;overflow:hidden;">';
     
     // Search box
-    html += '<div style="padding:8px;border-bottom:1px solid #eee;">';
-    html += '<input type="text" id="msSearch" placeholder="Buscar obra..." oninput="filterMsList()" style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:0.78rem;outline:none;">';
+    html += '<div style="padding:8px;border-bottom:1px solid ' + border + ';">';
+    html += '<input type="text" id="msSearch" placeholder="Buscar obra..." oninput="filterMsList()" style="width:100%;padding:6px 10px;border:1px solid ' + border + ';border-radius:4px;font-size:0.82rem;background:' + bg2 + ';color:' + text + ';outline:none;">';
     html += '</div>';
     
     // Select all / deselect all
-    html += '<div style="padding:6px 8px;border-bottom:1px solid #eee;display:flex;gap:8px;">';
-    html += '<a href="#" onclick="msSelectAll();return false;" style="font-size:0.72rem;color:#3498db;text-decoration:none;">Todas</a>';
-    html += '<a href="#" onclick="msDeselectAll();return false;" style="font-size:0.72rem;color:#e74c3c;text-decoration:none;">Ninguna</a>';
+    html += '<div style="padding:6px 10px;border-bottom:1px solid ' + border + ';display:flex;gap:12px;">';
+    html += '<a href="#" onclick="msSelectAll();return false;" style="font-size:0.78rem;color:#3498db;text-decoration:none;font-weight:600;">Todas</a>';
+    html += '<a href="#" onclick="msDeselectAll();return false;" style="font-size:0.78rem;color:#e74c3c;text-decoration:none;font-weight:600;">Ninguna</a>';
     html += '</div>';
     
     // Checkboxes
@@ -257,8 +268,8 @@ function initMultiSelect() {
     for (var i = 0; i < projectList.length; i++) {
         var pn = projectList[i];
         var sn = shortName(pn);
-        html += '<label class="ms-item" data-name="' + pn.replace(/"/g, '&quot;') + '" style="display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;font-size:0.75rem;transition:background .15s;" onmouseover="this.style.background=\'#f5f5f5\'" onmouseout="this.style.background=\'transparent\'">';
-        html += '<input type="checkbox" class="ms-cb" value="' + pn.replace(/"/g, '&quot;') + '" onchange="msChanged()" style="accent-color:#D4742C;">';
+        html += '<label class="ms-item" data-name="' + pn.replace(/"/g, '&quot;') + '" style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;color:' + text + ';transition:background .15s;" onmouseover="this.style.background=\'' + hoverBg + '\'" onmouseout="this.style.background=\'transparent\'">';
+        html += '<input type="checkbox" class="ms-cb" value="' + pn.replace(/"/g, '&quot;') + '" onchange="msChanged()" style="accent-color:#D4742C;width:15px;height:15px;">';
         html += '<span>' + sn + '</span>';
         html += '</label>';
     }
@@ -328,9 +339,12 @@ function msChanged() {
 function updateMsLabel() {
     var label = document.getElementById('msLabel');
     if (!label) return;
+    var bodyBg2 = getComputedStyle(document.body).backgroundColor;
+    var isDark = document.body.classList.contains('dark-theme') || bodyBg2 === 'rgb(15, 25, 35)' || bodyBg2 === 'rgb(15, 23, 42)' || (bodyBg2.match(/rgb/) && parseInt(bodyBg2.split(',')[1]) < 50);
+    var defaultColor = isDark ? '#e2e8f0' : '#333';
     if (selectedProjects.length === 0) {
         label.textContent = 'Todas las obras (' + projectList.length + ')';
-        label.style.color = '#333';
+        label.style.color = defaultColor;
     } else if (selectedProjects.length === 1) {
         label.textContent = shortName(selectedProjects[0]);
         label.style.color = '#D4742C';
