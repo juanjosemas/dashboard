@@ -162,11 +162,15 @@ for row in reader:
     importe = parse_euro_amount(importe_str)
     yr = extract_year(fecha)
     
-    # Filter by current month
+    # Filter: only current year and current month
     _f_parts = fecha.split('/') if fecha else []
     _f_month = int(_f_parts[1]) if len(_f_parts) >= 2 and _f_parts[1].isdigit() else 0
+    _f_yr = _f_parts[2] if len(_f_parts) == 3 else ''
     import datetime as _dt
+    _current_year = _dt.datetime.now().year
     _current_month = _dt.datetime.now().month
+    if _f_yr and _f_yr != str(_current_year):
+        continue
     if _f_month > _current_month:
         continue
     
@@ -634,12 +638,14 @@ for row in reader:
         elif 'importe' == kl: importe_str = val
         elif 't' in kl and 'tulo' in kl: titulo = val
         elif 'proveedor' in kl and 'id' not in kl: proveedor = val
-        elif 'fecha' in kl and 'imputa' in kl: fecha = val
+        elif kl == 'fecha': fecha = val
         elif 'digo' in kl or 'odigo' in kl: codigo = val
     
     importe = parse_euro_amount(importe_str)
     imp_class = "num neg" if importe < 0 else "num "
-    
+    # Filter by current year
+    _fp = fecha.split('/') if fecha else []
+    if len(_fp) == 3 and _fp[2] != str(_current_year): continue
     if 'GASTOS GENERALES' in proyecto:
         cat = '<span style="background:#3498db;color:white;padding:2px 8px;border-radius:10px;font-size:0.75rem">G.Generales</span>'
         gg_rows_html += '<tr><td style="font-size:0.78rem">%s</td><td>%s</td><td>%s</td><td>%s</td><td class="%s">%s</td><td style="font-size:0.8rem">%s</td></tr>\n' % (codigo, fecha, titulo, cat, imp_class, fmt(importe), proveedor[:40])
@@ -696,6 +702,7 @@ for row in reader:
     proyecto = ''
     importe_str = '0'
     titulo = ''
+    fecha = ''
     for key, val in row.items():
         if key is None:
             continue
@@ -704,9 +711,12 @@ for row in reader:
         if 'proyecto' == kl: proyecto = val.upper()
         elif 'importe' == kl: importe_str = val
         elif 't' in kl and 'tulo' in kl: titulo = val.upper()
-    
+        elif kl == 'fecha': fecha = val
     if 'GASTOS GENERALES' not in proyecto:
         continue
+    # Filter by current year
+    _fp = fecha.split('/') if fecha else []
+    if len(_fp) == 3 and _fp[2] != str(_current_year): continue
     importe = parse_euro_amount(importe_str)
     
     if any(w in titulo for w in ['REPOSTAJE', 'PLENOIL', 'GASO', 'COMBUSTIBLE', 'DIESEL', 'GASOLINA']):
@@ -745,6 +755,7 @@ for row in reader:
     proyecto = ''
     importe_str = '0'
     titulo = ''
+    fecha = ''
     for key, val in row.items():
         if key is None:
             continue
@@ -753,9 +764,12 @@ for row in reader:
         if 'proyecto' == kl: proyecto = val.upper()
         elif 'importe' == kl: importe_str = val
         elif 't' in kl and 'tulo' in kl: titulo = val.upper()
-    
+        elif kl == 'fecha': fecha = val
     if 'VEHICULOS' not in proyecto and 'VEH\u00cdCULOS' not in proyecto:
         continue
+    # Filter by current year
+    _fp = fecha.split('/') if fecha else []
+    if len(_fp) == 3 and _fp[2] != str(_current_year): continue
     importe = parse_euro_amount(importe_str)
     if any(w in titulo for w in ['REPOSTAJE', 'GASO', 'COMBUSTIBLE', 'DIESEL']):
         veh_cat_map['Combustible'] += importe

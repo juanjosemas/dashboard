@@ -7,6 +7,8 @@ Lee datos de datos_ecostruct.json (generado por extraer_datos.py)
 import json
 import os
 import re
+import datetime as _dt
+_CURRENT_YEAR = _dt.datetime.now().year
 
 BASE = r'C:\Users\jjmax\Downloads\1'
 
@@ -371,6 +373,9 @@ for _row in _reader:
     else: _s = _s.replace('.', '').replace(',', '')
     try: _imp = float(_s)
     except: _imp = 0.0
+    # Filter by current year
+    _fp = _fec.split('/') if _fec else []
+    if len(_fp) == 3 and _fp[2] != str(_CURRENT_YEAR): continue
     if 'GASTOS GENERALES' in _proy:
         _imp_cls = 'num neg' if _imp < 0 else 'num'
         lines.append('<tr><td style="font-size:0.72rem">%s</td><td>%s</td><td>%s</td><td><span class="badge badge-blue">G.Generales</span></td><td class="%s">%s</td><td style="font-size:0.75rem">%s</td></tr>' % (_cod, _fec, _tit, _imp_cls, fmt(_imp), _prov[:40]))
@@ -400,6 +405,9 @@ for _row in _reader:
     else: _s = _s.replace('.', '').replace(',', '')
     try: _imp = float(_s)
     except: _imp = 0.0
+    # Filter by current year
+    _fp = _fec.split('/') if _fec else []
+    if len(_fp) == 3 and _fp[2] != str(_CURRENT_YEAR): continue
     if 'VEHICULOS' in _proy or 'VEH\u00cdCULOS' in _proy:
         _imp_cls = 'num neg' if _imp < 0 else 'num'
         lines.append('<tr><td style="font-size:0.72rem">%s</td><td>%s</td><td>%s</td><td><span class="badge badge-red">Vehiculo</span></td><td class="%s">%s</td><td style="font-size:0.75rem">%s</td></tr>' % (_cod, _fec, _tit, _imp_cls, fmt(_imp), _prov[:40]))

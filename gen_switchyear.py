@@ -60,7 +60,7 @@ lines.append("  allCharts.cs=new Chart(document.getElementById('chartCostStack')
 
 # Margen bar
 lines.append("  var mv2=certP.map(function(p){return p.margen;});var mcc=certP.map(function(p){return p.margen>=0?'%s':'%s';});" % (C_SUCCESS, C_RED))
-lines.append("  allCharts.mb=new Chart(document.getElementById('chartMargenBar'),{type:'bar',data:{labels:cl2,datasets:[{label:'Margen',data:mv2,backgroundColor:mcc}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}},onClick:function(e,els){if(els.length>0){showDetail(els[0].index);}}}});")
+lines.append("  allCharts.mb=new Chart(document.getElementById('chartMargenBar'),{type:'bar',data:{labels:cl2,datasets:[{label:'Margen',data:mv2,backgroundColor:mcc}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}},onClick:function(e,els){if(els.length>0){showResumenDetail(els[0].index);}}}});")
 
 # Comparison bar
 lines.append("  allCharts.cp=new Chart(document.getElementById('chartComp'),{type:'bar',data:{labels:cl2,datasets:[{label:'Certificacion',data:certP.map(function(p){return p.certificacion;}),backgroundColor:'%s'},{label:'Coste Total',data:certP.map(function(p){return p.total_coste;}),backgroundColor:'%s'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{color:'#94a3b8'}}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});" % (C_ACCENT2, C_ORANGE))

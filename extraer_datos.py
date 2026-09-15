@@ -38,6 +38,7 @@ MONTH_ES = {1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Jun
 # Current month - only count data up to this month
 import datetime as _dt
 CURRENT_MONTH = _dt.datetime.now().month  # e.g. 9 for September
+CURRENT_YEAR = _dt.datetime.now().year  # Only count invoices from current year
 
 # ===== 1. CERTIFICACIONES POR MESES 2026 =====
 certificaciones = []
@@ -155,7 +156,9 @@ for row in reader:
     _f_yr = _f_parts[2] if len(_f_parts) == 3 else ''
     _f_month = int(_f_parts[1]) if len(_f_parts) >= 2 and _f_parts[1].isdigit() else 0
     
-    # Skip invoices from future months
+    # Skip invoices from other years or future months
+    if _f_yr and _f_yr != str(CURRENT_YEAR):
+        continue
     if _f_month > CURRENT_MONTH:
         continue
 
@@ -464,14 +467,18 @@ with open(csv_path, 'r', encoding='latin-1') as f:
     content = f.read()
 reader = csv.DictReader(io.StringIO(content), delimiter=';')
 for row in reader:
-    proyecto = ''; importe_str = '0'; titulo = ''
+    proyecto = ''; importe_str = '0'; titulo = ''; fecha = ''
     for key, val in row.items():
         if key is None: continue
         kl = key.lower(); val = val.strip() if val else ''
         if 'proyecto' == kl: proyecto = val.upper()
         elif 'importe' == kl: importe_str = val
         elif 't' in kl and 'tulo' in kl: titulo = val.upper()
+        elif kl == 'fecha': fecha = val
     if 'GASTOS GENERALES' not in proyecto: continue
+    # Skip invoices from other years
+    _fp = fecha.split('/') if fecha else []
+    if len(_fp) == 3 and _fp[2] != str(CURRENT_YEAR): continue
     importe = parse_euro_amount(importe_str)
     if any(w in titulo for w in ['REPOSTAJE', 'PLENOIL', 'GASO', 'COMBUSTIBLE', 'DIESEL', 'GASOLINA']): gg_cat_map['Combustible'] += importe
     elif 'ALQUILER' in titulo: gg_cat_map['Alquiler'] += importe
@@ -490,14 +497,18 @@ with open(csv_path, 'r', encoding='latin-1') as f:
     content = f.read()
 reader = csv.DictReader(io.StringIO(content), delimiter=';')
 for row in reader:
-    proyecto = ''; importe_str = '0'; titulo = ''
+    proyecto = ''; importe_str = '0'; titulo = ''; fecha = ''
     for key, val in row.items():
         if key is None: continue
         kl = key.lower(); val = val.strip() if val else ''
         if 'proyecto' == kl: proyecto = val.upper()
         elif 'importe' == kl: importe_str = val
         elif 't' in kl and 'tulo' in kl: titulo = val.upper()
+        elif kl == 'fecha': fecha = val
     if 'VEHICULOS' not in proyecto and 'VEH\u00cdCULOS' not in proyecto: continue
+    # Skip invoices from other years
+    _fp = fecha.split('/') if fecha else []
+    if len(_fp) == 3 and _fp[2] != str(CURRENT_YEAR): continue
     importe = parse_euro_amount(importe_str)
     if any(w in titulo for w in ['REPOSTAJE', 'GASO', 'COMBUSTIBLE', 'DIESEL']): veh_cat_map['Combustible'] += importe
     elif 'ITV' in titulo: veh_cat_map['ITV'] += importe

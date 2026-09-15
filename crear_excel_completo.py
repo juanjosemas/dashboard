@@ -154,6 +154,18 @@ for row in reader:
     except:
         importe = 0
 
+    # Filter: only current year invoices
+    _fp = fecha.split('/') if fecha else []
+    _f_yr = _fp[2] if len(_fp) == 3 else ''
+    _f_month = int(_fp[1]) if len(_fp) >= 2 and _fp[1].isdigit() else 0
+    import datetime as _dtyr
+    _current_year = _dtyr.datetime.now().year
+    _current_month = _dtyr.datetime.now().month
+    if _f_yr and _f_yr != str(_current_year):
+        continue
+    if _f_month > _current_month:
+        continue
+
     entry = {'cod': cod, 'fecha': fecha, 'titulo': titulo, 'proveedor': proveedor, 'importe': importe, 'proyecto': proyecto, 'estado': estado}
 
     if 'GASTOS GENERALES' in proyecto:
