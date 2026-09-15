@@ -1,8 +1,9 @@
-// Month + Project filter system for ECO STRUCT Dashboard
+// Month + Multi-Project filter system for ECO STRUCT Dashboard
 // Shared between V1 and V2
 
 var currentMonth = 'todos';
-var currentProject = '';
+var selectedProjects = []; // empty = all projects
+var projectList = []; // populated on load
 
 function fmtE(v) {
     if (typeof Intl !== 'undefined') {
@@ -37,6 +38,53 @@ function fmtN(v) {
         if (count % 3 === 0 && i !== 0) result = '.' + result;
     }
     return result;
+}
+
+function shortName(nombre) {
+    // Remove the ID prefix: "24016 - PLAZA CIRCULAR" -> "PLAZA CIRCULAR"
+    var parts = nombre.split(' - ');
+    if (parts.length > 1) return parts.slice(1).join(' - ');
+    return nombre;
+}
+
+function getFilteredData(data) {
+    if (!data || !data.proyectos) return data;
+    if (selectedProjects.length === 0) return data; // all selected
+    
+    var filtered = [];
+    var totalCert = 0, totalDir = 0, totalPrr = 0, totalMo = 0, totalHoras = 0;
+    var totalFact = 0;
+    for (var i = 0; i < data.proyectos.length; i++) {
+        var p = data.proyectos[i];
+        if (selectedProjects.indexOf(p.nombre) >= 0) {
+            filtered.push(p);
+            totalCert += p.certificacion;
+            totalDir += p.gastos_directos;
+            totalPrr += p.prorrateo;
+            totalMo += p.mano_obra_coste;
+            totalHoras += p.mano_obra_horas;
+            totalFact += (p.direct_count || 0);
+        }
+    }
+    var totalCoste = totalDir + totalPrr + totalMo;
+    var totalMargen = totalCert - totalCoste;
+    
+    return {
+        cert: totalCert,
+        directos: totalDir,
+        prorrateo: totalPrr,
+        mo: totalMo,
+        horas: totalHoras,
+        coste: totalCoste,
+        margen: totalMargen,
+        gg: data.gg || 0,
+        veh: data.veh || 0,
+        gg_count: data.gg_count || 0,
+        veh_count: data.veh_count || 0,
+        nfacturas: totalFact,
+        proyectos: filtered,
+        _isProject: true
+    };
 }
 
 function getProjectData(data, projectName) {
@@ -74,7 +122,9 @@ function updateFilterIndicator() {
                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     var parts = [];
     if (currentMonth !== 'todos') parts.push(monthNames[parseInt(currentMonth)]);
-    if (currentProject) parts.push(currentProject.split(' - ').slice(1).join(' - '));
+    if (selectedProjects.length > 0) {
+        parts.push(selectedProjects.length + ' obra(s) seleccionada(s)');
+    }
     
     if (parts.length === 0) {
         el.textContent = 'Todos los datos';
@@ -96,10 +146,9 @@ function doFilter() {
     }
     if (!data) return;
     
-    // If project selected, filter to that project
-    if (currentProject) {
-        var pData = getProjectData(data, currentProject);
-        if (pData) data = pData;
+    // Filter by selected projects (multi-select)
+    if (selectedProjects.length > 0) {
+        data = getFilteredData(data);
     }
     
     updateFilterIndicator();
@@ -114,7 +163,7 @@ function doFilter() {
         kpis[1].querySelector('.sub').textContent = (data.nfacturas || 0) + ' facturas por obra';
         var gcTotal = (data.gg || 0) + (data.veh || 0);
         kpis[2].querySelector('.value').textContent = fmtE(gcTotal);
-        if (currentProject) {
+        if (selectedProjects.length > 0) {
             kpis[2].querySelector('.sub').textContent = 'Prorrateo adjudicado';
         } else {
             kpis[2].querySelector('.sub').textContent = 'GG ' + fmtN(Math.round(data.gg || 0)) + ' + VEH ' + fmtN(Math.round(data.veh || 0));
@@ -141,7 +190,7 @@ function doFilter() {
         kpis2[2].querySelector('.kpi-value').textContent = fmtE(gcTotal2);
         var sub2 = kpis2[2].querySelectorAll('.kpi-sub');
         if (sub2.length > 0) {
-            if (currentProject) {
+            if (selectedProjects.length > 0) {
                 sub2[0].textContent = 'Prorrateo adjudicado';
             } else {
                 sub2[0].textContent = 'GG ' + fmtN(Math.round(data.gg || 0)) + ' + VEH ' + fmtN(Math.round(data.veh || 0));
@@ -173,7 +222,125 @@ function switchMonthV2(month, btn) {
     doFilter();
 }
 
-function switchProject(projName) {
-    currentProject = projName;
+// ===== MULTI-SELECT PROJECT DROPDOWN =====
+
+function initMultiSelect() {
+    var container = document.getElementById('multiSelectContainer');
+    if (!container || !monthlyDataAll || !monthlyDataAll.proyectos) return;
+    
+    // Build project list from data
+    projectList = monthlyDataAll.proyectos.map(function(p) { return p.nombre; });
+    projectList.sort();
+    
+    // Build the multi-select HTML
+    var html = '';
+    html += '<div class="ms-wrapper" style="position:relative;display:inline-block;">';
+    html += '<div class="ms-trigger" id="msTrigger" onclick="toggleMultiSelect()" style="cursor:pointer;padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:white;font-size:0.8rem;display:flex;align-items:center;gap:8px;min-width:200px;justify-content:space-between;transition:all .2s;">';
+    html += '<span id="msLabel">Todas las obras (' + projectList.length + ')</span>';
+    html += '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 5L6 8L9 5" stroke="#666" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    html += '</div>';
+    html += '<div class="ms-panel" id="msPanel" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;max-height:320px;overflow:hidden;">';
+    
+    // Search box
+    html += '<div style="padding:8px;border-bottom:1px solid #eee;">';
+    html += '<input type="text" id="msSearch" placeholder="Buscar obra..." oninput="filterMsList()" style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:0.78rem;outline:none;">';
+    html += '</div>';
+    
+    // Select all / deselect all
+    html += '<div style="padding:6px 8px;border-bottom:1px solid #eee;display:flex;gap:8px;">';
+    html += '<a href="#" onclick="msSelectAll();return false;" style="font-size:0.72rem;color:#3498db;text-decoration:none;">Todas</a>';
+    html += '<a href="#" onclick="msDeselectAll();return false;" style="font-size:0.72rem;color:#e74c3c;text-decoration:none;">Ninguna</a>';
+    html += '</div>';
+    
+    // Checkboxes
+    html += '<div id="msList" style="max-height:240px;overflow-y:auto;padding:4px 0;">';
+    for (var i = 0; i < projectList.length; i++) {
+        var pn = projectList[i];
+        var sn = shortName(pn);
+        html += '<label class="ms-item" data-name="' + pn.replace(/"/g, '&quot;') + '" style="display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;font-size:0.75rem;transition:background .15s;" onmouseover="this.style.background=\'#f5f5f5\'" onmouseout="this.style.background=\'transparent\'">';
+        html += '<input type="checkbox" class="ms-cb" value="' + pn.replace(/"/g, '&quot;') + '" onchange="msChanged()" style="accent-color:#D4742C;">';
+        html += '<span>' + sn + '</span>';
+        html += '</label>';
+    }
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+    
+    container.innerHTML = html;
+    
+    // Close on outside click
+    document.addEventListener('click', function(e) {
+        var panel = document.getElementById('msPanel');
+        var trigger = document.getElementById('msTrigger');
+        if (!panel || !trigger) return;
+        if (!trigger.contains(e.target) && !panel.contains(e.target)) {
+            panel.style.display = 'none';
+        }
+    });
+}
+
+function toggleMultiSelect() {
+    var panel = document.getElementById('msPanel');
+    if (!panel) return;
+    var isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+        var search = document.getElementById('msSearch');
+        if (search) { search.value = ''; search.focus(); filterMsList(); }
+    }
+}
+
+function filterMsList() {
+    var search = document.getElementById('msSearch');
+    var list = document.getElementById('msList');
+    if (!search || !list) return;
+    var q = search.value.toLowerCase();
+    var items = list.querySelectorAll('.ms-item');
+    items.forEach(function(item) {
+        var name = item.getAttribute('data-name').toLowerCase();
+        item.style.display = name.indexOf(q) >= 0 ? 'flex' : 'none';
+    });
+}
+
+function msSelectAll() {
+    selectedProjects = [];
+    document.querySelectorAll('.ms-cb').forEach(function(cb) { cb.checked = false; });
+    updateMsLabel();
     doFilter();
 }
+
+function msDeselectAll() {
+    selectedProjects = [];
+    document.querySelectorAll('.ms-cb').forEach(function(cb) { cb.checked = false; });
+    updateMsLabel();
+    doFilter();
+}
+
+function msChanged() {
+    selectedProjects = [];
+    document.querySelectorAll('.ms-cb:checked').forEach(function(cb) {
+        selectedProjects.push(cb.value);
+    });
+    updateMsLabel();
+    doFilter();
+}
+
+function updateMsLabel() {
+    var label = document.getElementById('msLabel');
+    if (!label) return;
+    if (selectedProjects.length === 0) {
+        label.textContent = 'Todas las obras (' + projectList.length + ')';
+        label.style.color = '#333';
+    } else if (selectedProjects.length === 1) {
+        label.textContent = shortName(selectedProjects[0]);
+        label.style.color = '#D4742C';
+    } else {
+        label.textContent = selectedProjects.length + ' obras seleccionadas';
+        label.style.color = '#D4742C';
+    }
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(initMultiSelect, 100);
+});

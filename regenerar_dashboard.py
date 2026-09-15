@@ -897,12 +897,8 @@ lines.append('  <button class="month-btn active" onclick="switchMonth(\'todos\',
 for _mi in range(1, 13):
     _mn = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][_mi-1]
     lines.append('  <button class="month-btn" onclick="switchMonth(%d,this)" style="padding:4px 10px;border:1px solid #ddd;border-radius:12px;cursor:pointer;font-size:0.7rem;font-weight:500;background:#f8f9fa;color:#5a6a7a;transition:all .2s">%s</button>' % (_mi, _mn))
-lines.append('  <span style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-left:12px;margin-right:4px">Obra:</span>')
-lines.append('  <select id="projectFilter" onchange="switchProject(this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.7rem;background:#f8f9fa;color:#5a6a7a;cursor:pointer;max-width:280px">')
-lines.append('    <option value="">Todas las obras</option>')
-for _p in proyectos_data:
-    lines.append('    <option value="%s">%s</option>' % (_p['nombre'].replace('"', '&quot;'), _p['nombre']))
-lines.append('  </select>')
+lines.append('  <span style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-left:12px;margin-right:4px">Obra(s):</span>')
+lines.append('  <div id="multiSelectContainer" style="display:inline-block"></div>')
 lines.append('  <span id="filterIndicator" style="margin-left:12px;padding:4px 12px;border-radius:6px;font-size:0.7rem;font-weight:600;background:rgba(52,152,219,0.1);color:#3498db">Todos los datos</span>')
 lines.append('</div>')
 # Build project options for the PDF selector

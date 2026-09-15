@@ -217,12 +217,8 @@ lines.append('  <button class="month-btn active" onclick="switchMonth(\'todos\',
 for _mi in range(1, 13):
     _mn = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][_mi-1]
     lines.append('  <button class="month-btn" onclick="switchMonth(%d,this)">%s</button>' % (_mi, _mn))
-lines.append('  <span style="font-size:0.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-left:12px;margin-right:4px">Obra:</span>')
-lines.append('  <select id="projectFilter" onchange="switchProject(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.7rem;background:var(--card2);color:var(--text2);cursor:pointer;max-width:280px">')
-lines.append('    <option value="">Todas las obras</option>')
-for _p in proyectos_data:
-    lines.append('    <option value="%s">%s</option>' % (_p['nombre'].replace('"', '&quot;'), _p['nombre']))
-lines.append('  </select>')
+lines.append('  <span style="font-size:0.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-left:12px;margin-right:4px">Obra(s):</span>')
+lines.append('  <div id="multiSelectContainer" style="display:inline-block"></div>')
 lines.append('  <span id="filterIndicator" style="margin-left:12px;padding:4px 12px;border-radius:6px;font-size:0.7rem;font-weight:600;background:rgba(52,152,219,0.1);color:#3498db">Todos los datos</span>')
 lines.append('</div>')
 lines.append('  <div style="margin-left:8px;display:flex;gap:6px;align-items:center">')
@@ -469,8 +465,7 @@ lines.append("var monthNames=['','Enero','Febrero','Marzo','Abril','Mayo','Junio
 with open(BASE + r'\month_filter.js', 'r', encoding='utf-8') as _mf:
     for _mfl in _mf.read().split('\n'):
         if _mfl.strip(): lines.append(_mfl)
-# Override switchMonth to use V2 selectors
-lines.append("switchMonth = switchMonthV2;")
+# switchMonth already works for V2 from month_filter.js
 
 # Chart data
 lines.append("var projectData=%s;" % json.dumps([{
