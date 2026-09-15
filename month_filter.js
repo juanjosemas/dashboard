@@ -79,6 +79,7 @@ function getFilteredData(data) {
         margen: totalMargen,
         gg: data.gg || 0,
         veh: data.veh || 0,
+        prr_total: totalPrr,
         gg_count: data.gg_count || 0,
         veh_count: data.veh_count || 0,
         nfacturas: totalFact,
@@ -161,7 +162,7 @@ function doFilter() {
         kpis[0].querySelector('.sub').textContent = certCount + ' proyectos';
         kpis[1].querySelector('.value').textContent = fmtE(data.directos);
         kpis[1].querySelector('.sub').textContent = (data.nfacturas || 0) + ' facturas por obra';
-        var gcTotal = (data.gg || 0) + (data.veh || 0);
+        var gcTotal = selectedProjects.length > 0 ? (data.prr_total || 0) : (data.gg || 0) + (data.veh || 0);
         kpis[2].querySelector('.value').textContent = fmtE(gcTotal);
         if (selectedProjects.length > 0) {
             kpis[2].querySelector('.sub').textContent = 'Prorrateo adjudicado';
@@ -186,7 +187,7 @@ function doFilter() {
         kpis2[1].querySelector('.kpi-value').textContent = fmtE(data.directos);
         var sub1 = kpis2[1].querySelectorAll('.kpi-sub');
         if (sub1.length > 0) sub1[0].textContent = (data.nfacturas || 0) + ' facturas por obra';
-        var gcTotal2 = (data.gg || 0) + (data.veh || 0);
+        var gcTotal2 = selectedProjects.length > 0 ? (data.prr_total || 0) : (data.gg || 0) + (data.veh || 0);
         kpis2[2].querySelector('.kpi-value').textContent = fmtE(gcTotal2);
         var sub2 = kpis2[2].querySelectorAll('.kpi-sub');
         if (sub2.length > 0) {
