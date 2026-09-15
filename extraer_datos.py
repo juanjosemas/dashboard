@@ -315,20 +315,30 @@ def mo_cost(m):
         return m['horas'] * m['tarifa']
     return m['coste']
 
-def build_proyectos(certs_for_month, dir_for_month, mo_for_month, gg_yr, veh_yr, cert_names_for_month, month_num=None):
-    """Build project data for a specific month or all months."""
+def build_proyectos(certs_for_month, dir_for_month, mo_for_month, gg_yr, veh_yr, cert_names_for_month, month_num=None, use_annual_pct=False):
+    """Build project data for a specific month or all months.
+    use_annual_pct: if True, prorrateo uses annual cert % instead of monthly %
+    """
     _proyectos = []
+    # Annual cert totals for prorrateo
+    _annual_total = sum(c['importe'] for c in cert_lookup.values()) if cert_lookup else 0
     for pname in all_project_names:
         cert_data = certs_for_month.get(pname, None)
         ci = cert_data['importe'] if cert_data else 0.0
-        _pct = ci / sum(c['importe'] for c in certs_for_month.values()) if certs_for_month and ci > 0 and cert_data else 0
+        # For prorrateo: use annual % if requested, else monthly %
+        if use_annual_pct:
+            _annual_ci = cert_lookup.get(pname, {}).get('importe', 0) if cert_lookup else 0
+            _pct = _annual_ci / _annual_total if _annual_total > 0 and _annual_ci > 0 else 0
+        else:
+            _pct = ci / sum(c['importe'] for c in certs_for_month.values()) if certs_for_month and ci > 0 and cert_data else 0
         
         dt = 0.0; dc = 0
-        if cert_data:
-            for csv_proj in cert_to_csvs.get(pname, []):
-                dt += dir_for_month.get(csv_proj, {}).get('total', 0)
-                dc += dir_for_month.get(csv_proj, {}).get('count', 0)
-        elif pname in dir_for_month:
+        # Always try csv_to_cert mapping (works even without monthly cert)
+        for csv_proj in cert_to_csvs.get(pname, []):
+            dt += dir_for_month.get(csv_proj, {}).get('total', 0)
+            dc += dir_for_month.get(csv_proj, {}).get('count', 0)
+        # Fallback: direct match by project name
+        if dt == 0 and pname in dir_for_month:
             dt = dir_for_month[pname]['total']
             dc = dir_for_month[pname]['count']
         
@@ -366,6 +376,34 @@ sum_horas = sum(p['mano_obra_horas'] for p in proyectos_all)
 sum_coste = sum(p['total_coste'] for p in proyectos_all)
 sum_margen = sum(p['margen'] for p in proyectos_all)
 
+# Pre-compute start month for each project (first month with MO, cert, or direct expenses)
+project_start_month = {}
+for pname in all_project_names:
+    start = 13  # no activity yet
+    # Check certifications
+    cl = cert_lookup.get(pname, None)
+    if cl:
+        for m in cl.get('meses', {}):
+            if cl['meses'][m] > 0 and m < start:
+                start = m
+    # Check direct expenses per month
+    for mi2 in range(1, 13):
+        for csv_proj in cert_to_csvs.get(pname, []):
+            if csv_proj in dir_by_month.get(mi2, {}) and dir_by_month[mi2][csv_proj].get('total', 0) > 0:
+                if mi2 < start:
+                    start = mi2
+        if pname in dir_by_month.get(mi2, {}) and dir_by_month[mi2][pname].get('total', 0) > 0:
+            if mi2 < start:
+                start = mi2
+    # Check mano de obra
+    for mo in mano_obra_all:
+        if mo_to_project.get(id(mo), None) == pname:
+            for m in mo.get('meses', {}):
+                if mo['meses'][m] > 0 and m < start:
+                    start = m
+    if start <= 12:
+        project_start_month[pname] = start
+
 # Build per-month summary
 monthly_data = {}
 for mi in range(1, 13):
@@ -388,7 +426,16 @@ for mi in range(1, 13):
     gg_m = gg_by_month.get(mi, 0)
     veh_m = veh_by_month.get(mi, 0)
     
-    proyectos_m = build_proyectos(certs_m, dir_m, mo_m, gg_m, veh_m, certs_m, month_num=mi)
+    proyectos_m = build_proyectos(certs_m, dir_m, mo_m, gg_m, veh_m, certs_m, month_num=mi, use_annual_pct=True)
+    
+    # Zero out prorrateo for projects that haven't started yet
+    for p in proyectos_m:
+        sm = project_start_month.get(p['nombre'], 13)
+        if mi < sm:
+            p['prorrateo'] = 0
+            p['total_coste'] = p['gastos_directos'] + p['mano_obra_coste']
+            p['margen'] = p['certificacion'] - p['total_coste']
+            p['margen_pct'] = (p['margen'] / p['certificacion'] * 100) if p['certificacion'] > 0 else 0
     
     sc = sum(p['certificacion'] for p in proyectos_m)
     sd = sum(p['gastos_directos'] for p in proyectos_m)
