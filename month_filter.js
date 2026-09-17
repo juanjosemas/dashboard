@@ -271,7 +271,7 @@ function initMultiSelect() {
         var sn = shortName(pn);
         html += '<label class="ms-item" data-name="' + pn.replace(/"/g, '&quot;') + '" style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;color:' + text + ';transition:background .15s;" onmouseover="this.style.background=\'' + hoverBg + '\'" onmouseout="this.style.background=\'transparent\'">';
         html += '<input type="checkbox" class="ms-cb" value="' + pn.replace(/"/g, '&quot;') + '" onchange="msChanged()" style="accent-color:#D4742C;width:15px;height:15px;">';
-        html += '<span>' + sn + '</span>';
+        html += '<span>' + pn + '</span>';
         html += '</label>';
     }
     html += '</div>';
@@ -347,7 +347,7 @@ function updateMsLabel() {
         label.textContent = 'Todas las obras (' + projectList.length + ')';
         label.style.color = defaultColor;
     } else if (selectedProjects.length === 1) {
-        label.textContent = shortName(selectedProjects[0]);
+        label.textContent = selectedProjects[0];
         label.style.color = '#D4742C';
     } else {
         label.textContent = selectedProjects.length + ' obras seleccionadas';
