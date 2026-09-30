@@ -10,3 +10,11 @@ INFORME_HUERFANAS.txt
 __pycache__/
 *.pyc
 .freebuff/
+
+# Restos de otros análisis que se guardan aquí pero NO son parte del dashboard
+# publicado en GitHub. Siguen existiendo en la carpeta, solo se excluyen del repo.
+/parse_presupuesto.py
+/presupuesto_parse.json
+/presupuesto_texto.txt
+/projectdata.json
+/gen_desglose.py

@@ -31,19 +31,9 @@ echo.
 
 REM -- Paso 3: Añadir y commitear todos los archivos --
 echo [3/4] Añadiendo archivos...
-git add dashboard.html
-git add dashboard_v2.html
-git add pdf_func.js
-git add month_filter.js
-git add logo_ecostruct.png
-git add datos_ecostruct.json
-git add ECO_STRUCT_Datos.xlsx
-git add README.md
-git add switchYear_v1.js
-git add switchYear.js
-git add "dashboard/CERTIFICACIONES POR MESES 2026.xlsx"
-git add "dashboard/GASTOS MANO DE OBRA POR MESES 2026.xlsx"
-git add "dashboard/ECO_STRUCT_-_Workspace_Gastos.csv"
+REM El .gitignore descarta el ZIP de copia de seguridad, las carpetas
+REM temporales y __pycache__, asi que aqui se puede anadir todo el proyecto.
+git add -A
 git commit -m "Actualizacion del dashboard"
 echo.
 
