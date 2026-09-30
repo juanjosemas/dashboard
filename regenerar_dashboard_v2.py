@@ -10,7 +10,7 @@ import re
 import datetime as _dt
 _CURRENT_YEAR = _dt.datetime.now().year
 
-BASE = r'C:\Users\jjmax\Downloads\1'
+BASE = os.path.dirname(os.path.abspath(__file__))
 
 # Load data
 with open(BASE + r'\datos_ecostruct.json', 'r', encoding='utf-8') as f:
@@ -235,6 +235,22 @@ lines.append('</div>')
 
 # === RESUMEN TAB ===
 lines.append('<div class="tab-content active" id="tab-resumen">')
+# Aviso de obras huerfanas: gastos directos sin certificacion asociada
+_huerfanas = [p for p in proyectos_data if not p['has_cert'] and p['gastos_directos'] > 0]
+if _huerfanas:
+    _h_total = sum(p['gastos_directos'] for p in _huerfanas)
+    lines.append('  <div class="card" style="border-left:3px solid var(--red);margin-bottom:16px">')
+    lines.append('    <div style="font-weight:700;color:var(--red);font-size:0.8rem;margin-bottom:6px">&#9888; %d obra(s) con facturas pero sin certificacion &mdash; %s EUR</div>' % (
+        len(_huerfanas), "{:,.2f}".format(_h_total).replace(',', 'X').replace('.', ',').replace('X', '.')))
+    lines.append('    <div style="font-size:0.72rem;color:var(--text2)">Estas obras no aparecen en <em>CERTIFICACIONES POR MESES 2026.xlsx</em>. Suele significar que su nombre en el CSV de gastos no cuadra con el del xlsx y las facturas quedan en una entrada aparte. El detalle esta en <code>INFORME_HUERFANAS.txt</code>.</div>')
+    lines.append('    <ul style="margin:8px 0 0 16px;font-size:0.72rem;color:var(--text2)">')
+    for _p in _huerfanas[:8]:
+        lines.append('      <li>%s &mdash; %s EUR (%d facturas)</li>' % (
+            _p['nombre'][:60], "{:,.2f}".format(_p['gastos_directos']).replace(',', 'X').replace('.', ',').replace('X', '.'), _p['direct_count']))
+    if len(_huerfanas) > 8:
+        lines.append('      <li>... y %d mas</li>' % (len(_huerfanas) - 8))
+    lines.append('    </ul>')
+    lines.append('  </div>')
 # Resumen detail panel (for clicking on margen bars)
 lines.append('  <div class="card" id="resumen-detail-panel" style="display:none;border:1px solid var(--accent)">')
 lines.append('    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">')
@@ -310,6 +326,14 @@ for p in proyectos_data:
     prorrateo_label = fmt(p['prorrateo']) if p['has_cert'] else '<span style="color:var(--text2)">-</span>'
     pct_label = '%.1f%%' % p['margen_pct'] if p['has_cert'] else '-'
     name_extra = '' if p['has_cert'] else ' <span style="font-size:0.6rem;color:var(--text2)">(s/c)</span>'
+    # Aviso de obra sin certificacion pero con gastos: sus facturas pueden estar
+    # desdobladas si el nombre del CSV no cuadra con el de los xlsx.
+    if not p['has_cert'] and p['gastos_directos'] > 0:
+        name_extra += (' <span title="Obra sin certificacion en el xlsx de certificaciones. '
+                       'Revisa el emparejamiento de nombres: sus facturas pueden aparecer en otra obra." '
+                       'style="background:var(--red);color:#fff;border-radius:3px;padding:1px 5px;'
+                       'font-size:0.55rem;font-weight:700">&#9888; %d f.</span>'
+                       % p['direct_count'])
     _dn = p['nombre'][:26] + '..' if len(p['nombre']) > 28 else p['nombre']
     safe_name = p['nombre'].replace('"', '&quot;')
     lines.append('<tr%s><td title="%s"><strong>%s</strong>%s <button onclick="event.stopPropagation();generateObraPDF(\'%s\')" title="PDF" style="background:var(--accent);color:#0f1923;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.6rem;font-weight:700;margin-left:3px">PDF</button></td>' % (row_style, p['nombre'], _dn, name_extra, safe_name))
@@ -351,7 +375,7 @@ for row in all_facturas_dir:
 # Re-read CSV for GG/VEH detail
 import csv as _csv
 import io as _io
-csv_path = BASE + r'\dashboard\ECO_STRUCT_-_Workspace_Gastos.csv'
+csv_path = os.path.join(BASE, 'dashboard', 'ECO_STRUCT_-_Workspace_Gastos.csv')
 with open(csv_path, 'r', encoding='latin-1') as f:
     _c = f.read()
 _reader = _csv.DictReader(_io.StringIO(_c), delimiter=';')
@@ -365,7 +389,8 @@ for _row in _reader:
         elif 't' in _kl and 'tulo' in _kl: _tit = _v
         elif 'proveedor' in _kl and 'id' not in _kl: _prov = _v
         elif _kl == 'fecha': _fec = _v
-        elif 'digo' in _kl or 'odigo' in _kl: _cod = _v
+        elif _kl == 'id externo': _cod = _v
+        elif ('digo' in _kl or 'odigo' in _kl) and not _cod: _cod = _v
     _imp = 0.0
     _s = _imp_str.strip().replace('\u20ac', '').strip()
     if re.search(r',\d{1,2}$', _s): _s = _s.replace('.', '').replace(',', '.')
@@ -397,7 +422,8 @@ for _row in _reader:
         elif 't' in _kl and 'tulo' in _kl: _tit = _v
         elif 'proveedor' in _kl and 'id' not in _kl: _prov = _v
         elif _kl == 'fecha': _fec = _v
-        elif 'digo' in _kl or 'odigo' in _kl: _cod = _v
+        elif _kl == 'id externo': _cod = _v
+        elif ('digo' in _kl or 'odigo' in _kl) and not _cod: _cod = _v
     _imp = 0.0
     _s = _imp_str.strip().replace('\u20ac', '').strip()
     if re.search(r',\d{1,2}$', _s): _s = _s.replace('.', '').replace(',', '.')
@@ -417,7 +443,7 @@ lines.append('</div>')
 # === MANO DE OBRA TAB ===
 lines.append('<div class="tab-content" id="tab-manoObra">')
 lines.append('  <div class="card"><div class="card-title">Mano de Obra - Desglose por Proyecto</div>')
-lines.append('    <p style="font-size:0.8rem;color:var(--text2);margin-bottom:12px">Tarifa: 20 EUR/hora</p>')
+lines.append('    <p style="font-size:0.8rem;color:var(--text2);margin-bottom:12px">Tarifa: 17 EUR/hora</p>')
 lines.append('    <table><thead><tr><th>Proyecto</th><th class="num">Horas</th><th class="num">Tarifa</th><th class="num">Coste Total</th></tr></thead><tbody>')
 mo_2026 = [m for m in mano_obra_all if m['year'] == 2026]
 mo_2025 = [m for m in mano_obra_all if m['year'] == 2025]
@@ -446,10 +472,10 @@ lines.append('    <div class="card"><div class="card-title">Distribucion por Pro
 lines.append('  </div>')
 lines.append('  <div class="card">')
 lines.append('    <div class="toolbar"><div class="card-title" style="margin:0">Listado de Facturas <span id="activeFilterBadge" style="display:none;background:var(--red);color:white;padding:2px 10px;border-radius:12px;font-size:0.7rem;margin-left:8px"></span></div><div style="display:flex;gap:6px;align-items:center"><button id="clearFilterBtn" onclick="clearChartFilter()" style="display:none;background:var(--red);color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:0.75rem">Limpiar</button><input type="text" class="search-box" placeholder="Buscar por proyecto, proveedor, titulo..." oninput="filterTable(\'facturasObraTable\',this.value)"></div></div>')
-lines.append('    <div style="max-height:600px;overflow-y:auto"><table id="facturasObraTable"><thead><tr><th>Proyecto</th><th>Codigo</th><th>Fecha</th><th>Titulo</th><th>Proveedor</th><th>Estado</th><th class="num">Importe</th></tr></thead><tbody>')
+lines.append('    <div style="max-height:600px;overflow-y:auto"><table id="facturasObraTable"><thead style="position:sticky;top:0;z-index:10"><tr><th>Proyecto</th><th>Fecha</th><th>Proveedor</th><th class="num">Importe</th><th>Titulo</th><th>Estado</th><th>Codigo</th></tr></thead><tbody>')
 for f in all_facturas_dir:
     imp_class = 'num neg' if f['importe'] < 0 else 'num'
-    lines.append('<tr><td style="font-size:0.72rem">%s</td><td style="font-size:0.72rem">%s</td><td>%s</td><td style="font-size:0.75rem">%s</td><td style="font-size:0.75rem">%s</td><td>%s</td><td class="%s">%s</td></tr>' % (f['proyecto'][:50], f['codigo'], f['fecha'], f['titulo'][:35], f['proveedor'][:35], f['estado'], imp_class, fmt(f['importe'])))
+    lines.append('<tr><td style="font-size:0.72rem">%s</td><td>%s</td><td style="font-size:0.75rem">%s</td><td class="%s">%s</td><td style="font-size:0.75rem">%s</td><td>%s</td><td style="font-size:0.72rem">%s</td></tr>' % (f['proyecto'][:50], f['fecha'], f['proveedor'][:35], imp_class, fmt(f['importe']), f['titulo'][:35], f['estado'], f['codigo']))
 lines.append('</tbody></table></div></div></div>')
 
 lines.append('</div>')  # container end
@@ -515,7 +541,7 @@ lines.append("function showResumenDetail(idx){var p=projectData[idx];var panel=d
 lines.append("document.addEventListener('DOMContentLoaded',function(){var rows=document.getElementById('projTable').querySelectorAll('tbody tr');rows.forEach(function(row,i){if(!row.classList.contains('total-row')){row.style.cursor='pointer';row.addEventListener('click',function(){showDetail(i);});row.addEventListener('mouseenter',function(){row.style.background='rgba(0,212,170,0.08)';});row.addEventListener('mouseleave',function(){row.style.background='';});}});});")
 
 # Chart filter
-lines.append("function filterByChart(type,idx){var val=type=='prov'?topProvFull[idx]:topProjFull[idx];var table=document.getElementById('facturasObraTable');var rows=table.querySelectorAll('tbody tr');var colIdx=type=='prov'?4:0;var shown=0;rows.forEach(function(row){var cells=row.querySelectorAll('td');if(cells.length>colIdx){var txt=cells[colIdx].textContent.toLowerCase();if(txt.indexOf(val.toLowerCase())>=0){row.style.display='';shown++;}else{row.style.display='none';}}});var badge=document.getElementById('activeFilterBadge');badge.style.display='inline';badge.textContent=type=='prov'?'Proveedor: '+val:'Proyecto: '+val;document.getElementById('clearFilterBtn').style.display='inline';document.getElementById('facturasObra').scrollIntoView({behavior:'smooth',block:'center'});}")
+lines.append("function filterByChart(type,idx){var val=type=='prov'?topProvFull[idx]:topProjFull[idx];var table=document.getElementById('facturasObraTable');var rows=table.querySelectorAll('tbody tr');var colIdx=type=='prov'?2:0;var shown=0;rows.forEach(function(row){var cells=row.querySelectorAll('td');if(cells.length>colIdx){var txt=cells[colIdx].textContent.toLowerCase();if(txt.indexOf(val.toLowerCase())>=0){row.style.display='';shown++;}else{row.style.display='none';}}});var badge=document.getElementById('activeFilterBadge');badge.style.display='inline';badge.textContent=type=='prov'?'Proveedor: '+val:'Proyecto: '+val;document.getElementById('clearFilterBtn').style.display='inline';document.getElementById('facturasObra').scrollIntoView({behavior:'smooth',block:'center'});}")
 lines.append("function clearChartFilter(){var rows=document.getElementById('facturasObraTable').querySelectorAll('tbody tr');rows.forEach(function(row){row.style.display='';});document.getElementById('activeFilterBadge').style.display='none';document.getElementById('clearFilterBtn').style.display='none';document.querySelector('.search-box').value='';}")
 
 # Charts initialization

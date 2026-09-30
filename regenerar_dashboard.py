@@ -11,6 +11,10 @@ import json
 import os
 import openpyxl
 
+# Carpeta base = esta misma carpeta del proyecto (nada de rutas fijas ni del NAS)
+BASE = os.path.dirname(os.path.abspath(__file__))
+DASH = os.path.join(BASE, 'dashboard')
+
 def parse_euro_amount(s):
     """Parse European amount: handles '8875,66' and '116432.26' and '1.699,09'"""
     if isinstance(s, (int, float)):
@@ -41,7 +45,7 @@ def extract_year(fecha):
 
 # ===== 1. CERTIFICACIONES =====
 certificaciones = []
-_cert_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.xlsx'
+_cert_xlsx_path = os.path.join(DASH, 'CERTIFICACIONES POR MESES 2026.xlsx')
 _wb_cert = openpyxl.load_workbook(_cert_xlsx_path, data_only=True)
 _ws_cert = _wb_cert.active
 import datetime as _dt
@@ -67,7 +71,7 @@ for c in certificaciones:
 # ===== 2. MANO DE OBRA =====
 # Read from CSV binary to handle latin-1 encoding
 mano_obra_all = []
-_mo_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\GASTOS MANO DE OBRA POR MESES 2026.xlsx'
+_mo_xlsx_path = os.path.join(DASH, 'GASTOS MANO DE OBRA POR MESES 2026.xlsx')
 _wb_mo = openpyxl.load_workbook(_mo_xlsx_path, data_only=True)
 _ws_mo = _wb_mo.active
 import datetime as _dt
@@ -106,7 +110,7 @@ for m in mano_obra_all:
     print("  %-50s %5d h x %dEUR = %sEUR  [%d]" % (m['proyecto'], m['horas'], m['tarifa'], "{:>10,.2f}".format(m['coste']), m['year']))
 
 # ===== 3. CSV GASTOS =====
-csv_path = r'C:\Users\jjmax\Downloads\1\dashboard\ECO_STRUCT_-_Workspace_Gastos.csv'
+csv_path = os.path.join(DASH, 'ECO_STRUCT_-_Workspace_Gastos.csv')
 
 with open(csv_path, 'r', encoding='latin-1') as f:
     content = f.read()
@@ -154,7 +158,9 @@ for row in reader:
             proveedor = val
         elif key_lower == 'fecha':
             fecha = val
-        elif 'digo' in key_lower or 'odigo' in key_lower:
+        elif key_lower == 'id externo':
+            codigo = val
+        elif ('digo' in key_lower or 'odigo' in key_lower) and not codigo:
             codigo = val
         elif 'estado' == key_lower:
             estado = val
@@ -217,8 +223,13 @@ for proj_csv, d in directos_por_proyecto.items():
             'estado': f.get('estado', ''),
             'importe': f.get('importe', 0)
         })
-# Sort by project then by amount descending
-all_facturas_dir.sort(key=lambda x: (x['proyecto'], -abs(x['importe'])))
+# Extract date parts and sort by date descending (newest first)
+for _fi in all_facturas_dir:
+    _fp = _fi.get('fecha', '').split('/')
+    _fi['year'] = _fp[2] if len(_fp) == 3 else ''
+    _fi['month'] = int(_fp[1]) if len(_fp) >= 2 and _fp[1].isdigit() else 0
+    _fi['day'] = int(_fp[0]) if len(_fp) >= 1 and _fp[0].isdigit() else 0
+all_facturas_dir.sort(key=lambda x: (x['year'], x['month'], x['day'], x['proyecto']), reverse=True)
 
 print("\nGastos Generales: %d facturas, %s EUR" % (gg_count, "{:,.2f}".format(gg_total)))
 print("Vehiculos: %d facturas, %s EUR" % (veh_count, "{:,.2f}".format(veh_total)))
@@ -229,12 +240,43 @@ for proj in sorted(directos_por_proyecto.keys(), key=lambda x: directos_por_proy
     print("  %-65s %s EUR (%d facturas)" % (proj[:65], "{:>12,.2f}".format(d['total']), d['count']))
 
 # ===== 4. MAPEO CSV -> CERTIFICACIONES =====
+def _norm_name(s):
+    """Normaliza un nombre de obra: mayusculas, sin acentos, sin espacios ni
+    signos de puntuacion. Permite emparejar '... -CALLE SOROLLA' con '... - CALLE SOROLLA'."""
+    s = str(s or '').upper()
+    s = s.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U').replace('Ñ', 'N')
+    return re.sub(r'[^A-Z0-9]', '', s)
+
+def _proj_code(s):
+    """Extrae el codigo numerico de obra (5 digitos al inicio, p.ej. 26013)."""
+    m = re.match(r'\s*(\d{5})', str(s or ''))
+    return m.group(1) if m else ''
+
+# Indice por codigo de obra -> nombre de certificacion (si es unico)
+_cert_by_code = {}
+for _c in certificaciones:
+    _code = _proj_code(_c['nombre'])
+    if _code:
+        _cert_by_code.setdefault(_code, []).append(_c['nombre'])
+_cert_by_code = {k: v[0] for k, v in _cert_by_code.items() if len(v) == 1}
+
 csv_to_cert = {}
 for proj_csv in directos_por_proyecto:
     proj_upper = proj_csv.upper()
+    # 1) Emparejar por codigo de obra (lo mas fiable)
+    _code = _proj_code(proj_csv)
+    if _code and _code in _cert_by_code:
+        csv_to_cert[proj_csv] = _cert_by_code[_code]
+        continue
     for cert in certificaciones:
         cert_upper = cert['nombre'].upper()
         if cert_upper in proj_upper or proj_upper in cert_upper:
+            csv_to_cert[proj_csv] = cert['nombre']
+            break
+        # 1b) Emparejar por nombre normalizado (ignora espacios y puntuacion)
+        _n_proj = _norm_name(proj_csv)
+        _n_cert = _norm_name(cert['nombre'])
+        if len(_n_proj) >= 12 and len(_n_cert) >= 12 and (_n_cert in _n_proj or _n_proj in _n_cert):
             csv_to_cert[proj_csv] = cert['nombre']
             break
         kw = False
@@ -546,6 +588,14 @@ for p in proyectos_data:
     prorrateo_label = fmt(p['prorrateo']) if p['has_cert'] else '<span style="color:#999">-</span>'
     pct_label = '%.1f%%' % p['margen_pct'] if p['has_cert'] else '-'
     name_extra = '' if p['has_cert'] else ' <span style="font-size:0.7rem;color:#999">(s/c)</span>'
+    # Aviso de obra sin certificacion pero con gastos: sus facturas pueden estar
+    # desdobladas si el nombre del CSV no cuadra con el de los xlsx.
+    if not p['has_cert'] and p['gastos_directos'] > 0:
+        name_extra += (' <span title="Obra sin certificacion en el xlsx de certificaciones. '
+                       'Revisa el emparejamiento de nombres: sus facturas pueden aparecer en otra obra." '
+                       'style="background:#e74c3c;color:#fff;border-radius:3px;padding:1px 5px;'
+                       'font-size:0.62rem;font-weight:700;vertical-align:middle">&#9888; %d f.</span>'
+                       % p['direct_count'])
     margen_rows += '<tr%s>\n' % row_style
     safe_name = p['nombre'].replace('"', '&quot;')
     # Shorten display name for table (keep full in tooltip)
@@ -639,7 +689,8 @@ for row in reader:
         elif 't' in kl and 'tulo' in kl: titulo = val
         elif 'proveedor' in kl and 'id' not in kl: proveedor = val
         elif kl == 'fecha': fecha = val
-        elif 'digo' in kl or 'odigo' in kl: codigo = val
+        elif kl == 'id externo': codigo = val
+        elif ('digo' in kl or 'odigo' in kl) and not codigo: codigo = val
     
     importe = parse_euro_amount(importe_str)
     imp_class = "num neg" if importe < 0 else "num "
@@ -657,10 +708,10 @@ for row in reader:
 facturas_obra_rows_html = ''
 for f in all_facturas_dir:
     imp_class = 'num neg' if f['importe'] < 0 else 'num'
-    facturas_obra_rows_html += '<tr><td style="font-size:0.78rem">%s</td><td style="font-size:0.78rem">%s</td><td>%s</td><td style="font-size:0.8rem">%s</td><td style="font-size:0.8rem">%s</td><td>%s</td><td class="%s">%s</td></tr>\n' % (
-        f['proyecto'][:50], f['codigo'], f['fecha'],
-        f['titulo'][:35], f['proveedor'][:35], f['estado'],
-        imp_class, fmt(f['importe'])
+    facturas_obra_rows_html += '<tr><td style="font-size:0.78rem">%s</td><td>%s</td><td style="font-size:0.8rem">%s</td><td class="%s">%s</td><td style="font-size:0.8rem">%s</td><td>%s</td><td style="font-size:0.78rem">%s</td></tr>\n' % (
+        f['proyecto'][:50], f['fecha'], f['proveedor'][:35],
+        imp_class, fmt(f['importe']), f['titulo'][:35],
+        f['estado'], f['codigo']
     )
 
 # Calculate top 10 suppliers by total amount
@@ -857,15 +908,22 @@ lines.append('</style>')
 lines.append('</head>')
 lines.append('<body>')
 
-# Generate base64 logo (rotated 180 to face upward)
+# Generate base64 logo (rotated 180 to face upward) - vive dentro del proyecto
 import base64 as _b64
 import io as _io
+import os as _os
 from PIL import Image as _Img
-_logo_orig = _Img.open(r'C:\NAS\03PUBLI\LOGO\LOGO 1\For Web\png\symbol.png')
-_logo_rot = _logo_orig.rotate(180)
-_logo_buf = _io.BytesIO()
-_logo_rot.save(_logo_buf, format='PNG')
-_logo_b64 = 'data:image/png;base64,' + _b64.b64encode(_logo_buf.getvalue()).decode()
+_LOGO_PATH = _os.path.join(BASE, 'assets', 'symbol.png')
+_logo_path = _LOGO_PATH if _os.path.exists(_LOGO_PATH) else None
+if _logo_path is None:
+    print("AVISO: no se encuentra el logo; se generara el dashboard sin el.")
+_logo_orig = _Img.open(_logo_path) if _logo_path else None
+_logo_b64 = ''
+if _logo_orig is not None:
+    _logo_rot = _logo_orig.rotate(180)
+    _logo_buf = _io.BytesIO()
+    _logo_rot.save(_logo_buf, format='PNG')
+    _logo_b64 = 'data:image/png;base64,' + _b64.b64encode(_logo_buf.getvalue()).decode()
 
 # Header
 lines.append('<div class="header">')
@@ -945,7 +1003,23 @@ lines.append('    <div style="background:linear-gradient(135deg,#f39c12,#e67e22)
 lines.append('    <div style="background:linear-gradient(135deg,#9b59b6,#8e44ad);color:white;border-radius:10px;padding:14px 12px;text-align:center"><div style="font-size:0.7rem;opacity:0.85;margin-bottom:4px">Horas Mano de Obra</div><div style="font-size:1.5rem;font-weight:700">%s h</div></div>' % ("{:,}".format(sum_horas)))
 lines.append('  </div>')
 
-# Row 1: Donut global + Cost composition stacked bars
+# Aviso de obras huerfanas: gastos directos sin certificacion asociada
+_huerfanas = [p for p in proyectos_data if not p['has_cert'] and p['gastos_directos'] > 0]
+if _huerfanas:
+    _h_total = sum(p['gastos_directos'] for p in _huerfanas)
+    lines.append('  <div style="background:#fdecea;border-left:4px solid #e74c3c;border-radius:6px;padding:12px 14px;margin-bottom:16px">')
+    lines.append('    <div style="font-weight:700;color:#c0392b;font-size:0.85rem;margin-bottom:6px">&#9888; %d obra(s) con facturas pero sin certificacion &mdash; %s EUR</div>' % (
+        len(_huerfanas), "{:,.2f}".format(_h_total).replace(',', 'X').replace('.', ',').replace('X', '.')))
+    lines.append('    <div style="font-size:0.75rem;color:#7b241c">Estas obras no aparecen en <em>CERTIFICACIONES POR MESES 2026.xlsx</em>. Suele significar que su nombre en el CSV de gastos no cuadra con el del xlsx y las facturas quedan en una entrada aparte. El detalle esta en <code>INFORME_HUERFANAS.txt</code>.</div>')
+    lines.append('    <ul style="margin:8px 0 0 18px;font-size:0.75rem;color:#7b241c">')
+    for _p in _huerfanas[:8]:
+        lines.append('      <li>%s &mdash; %s EUR (%d facturas)</li>' % (
+            _p['nombre'][:60], "{:,.2f}".format(_p['gastos_directos']).replace(',', 'X').replace('.', ',').replace('X', '.'), _p['direct_count']))
+    if len(_huerfanas) > 8:
+        lines.append('      <li>... y %d mas</li>' % (len(_huerfanas) - 8))
+    lines.append('    </ul>')
+    lines.append('  </div>')
+
 lines.append('  <div class="grid-2">')
 lines.append('    <div class="section"><div class="section-title">Composicion Global de Costes</div><div style="text-align:center"><canvas id="chartGlobalDonut" width="300" height="300"></canvas></div></div>')
 lines.append('    <div class="section"><div class="section-title">Composicion de Costes por Obra <span style="font-size:0.75rem;color:#888;font-weight:400">(clic en una barra para ver detalle)</span></div><div class="chart-container"><canvas id="chartCostStack"></canvas></div></div>')
@@ -1060,7 +1134,7 @@ lines.append('</div>')
 lines.append('<div class="tab-content" id="tab-manoObra">')
 lines.append('  <div class="section">')
 lines.append('    <div class="section-title">Mano de Obra - Desglose por Proyecto</div>')
-lines.append('    <p style="font-size:0.85rem;color:#666;margin-bottom:14px">Tarifa: 20 EUR/hora. Datos de "GASTOS MANO DE OBRA POR MESES 2026.csv".</p>')
+lines.append('    <p style="font-size:0.85rem;color:#666;margin-bottom:14px">Tarifa: 17 EUR/hora. Datos de "GASTOS MANO DE OBRA POR MESES 2026.xlsx".</p>')
 lines.append('    <div class="table-wrapper"><table><thead><tr><th>Proyecto</th><th class="num">Horas</th><th class="num">Tarifa (EUR/h)</th><th class="num">Coste Total (EUR)</th></tr></thead><tbody>')
 lines.append(mo_rows)
 lines.append('    </tbody></table></div>')
@@ -1079,7 +1153,7 @@ lines.append('    <div class="section"><div class="section-title">Distribucion p
 lines.append('  </div>')
 lines.append('  <div class="section">')
 lines.append('    <div class="toolbar"><div class="section-title" style="margin:0">Listado de Facturas <span id="activeFilterBadge" style="display:none;background:#e74c3c;color:white;padding:2px 10px;border-radius:12px;font-size:0.75rem;margin-left:8px"></span></div><div style="display:flex;gap:8px;align-items:center"><button id="clearFilterBtn" onclick="clearChartFilter()" style="display:none;background:#e74c3c;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem">\u2716 Limpiar filtro</button><input type="text" class="search-box" placeholder="Buscar por proyecto, proveedor, titulo, codigo..." oninput="filterTable(\'facturasObraTable\',this.value)"></div></div>')
-lines.append('    <div class="table-wrapper" style="max-height:600px;overflow-y:auto"><table id="facturasObraTable"><thead><tr><th>Proyecto</th><th>Codigo</th><th>Fecha</th><th>Titulo/Concepto</th><th>Proveedor</th><th>Estado</th><th class="num">Importe</th></tr></thead><tbody>')
+lines.append('    <div class="table-wrapper" style="max-height:600px;overflow-y:auto"><table id="facturasObraTable"><thead style="position:sticky;top:0;z-index:10"><tr><th>Proyecto</th><th>Fecha</th><th>Proveedor</th><th class="num">Importe</th><th>Titulo</th><th>Estado</th><th>Codigo</th></tr></thead><tbody>')
 lines.append(facturas_obra_rows_html)
 lines.append('    </tbody></table></div>')
 lines.append('  </div>')

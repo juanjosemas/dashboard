@@ -2,7 +2,7 @@
 """Genera switchYear.js para dashboard_v2.html"""
 import json, os
 
-BASE = r'C:\Users\jjmax\Downloads\1'
+BASE = os.path.dirname(os.path.abspath(__file__))
 with open(BASE + r'\datos_ecostruct.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
 

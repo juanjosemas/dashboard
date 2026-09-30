@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Como Funciona el Dashboard ECO STRUCT</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 30px; color: #333; }
+  h1 { text-align: center; color: #2B3A4E; margin-bottom: 5px; }
+  .subtitle { text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 30px; }
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; max-width: 900px; margin: 0 auto; }
+  .step { background: white; border-radius: 12px; padding: 20px 28px; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.08); position: relative; }
+  .arrow { font-size: 28px; color: #D4742C; margin: 5px 0; }
+  .arrow-label { font-size: 0.75rem; color: #888; margin-top: -8px; margin-bottom: 5px; }
+  .step-num { position: absolute; top: -12px; left: 20px; background: #D4742C; color: white; font-weight: 700; font-size: 0.8rem; padding: 4px 12px; border-radius: 20px; }
+  .step h2 { margin: 0 0 10px 0; font-size: 1.1rem; color: #2B3A4E; }
+  .files { display: flex; gap: 12px; flex-wrap: wrap; }
+  .file { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 14px; font-size: 0.8rem; flex: 1; min-width: 180px; }
+  .file .icon { font-size: 1.4rem; }
+  .file .name { font-weight: 600; color: #2B3A4E; margin: 4px 0 2px; word-break: break-all; }
+  .file .desc { color: #888; font-size: 0.72rem; }
+  .file.csv { border-left: 4px solid #27ae60; }
+  .file.xlsx { border-left: 4px solid #2980b9; }
+  .file.py { border-left: 4px solid #e67e22; }
+  .file.json { border-left: 4px solid #9b59b6; }
+  .file.html { border-left: 4px solid #e74c3c; }
+  .file.xlsx2 { border-left: 4px solid #2980b9; }
+  .highlight { background: #fff8f0; border: 2px solid #D4742C; }
+  .outputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .output { text-align: center; padding: 14px; }
+  .output .icon { font-size: 2rem; }
+  .output .name { font-weight: 700; font-size: 0.9rem; margin: 6px 0 2px; }
+  .output .desc { color: #888; font-size: 0.72rem; }
+  .bat-box { background: #2B3A4E; color: #4ecdc4; font-family: monospace; padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; text-align: center; }
+  .note { background: #fffde7; border-left: 4px solid #f1c40f; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 0.82rem; margin-top: 10px; color: #555; }
+  .footer { text-align: center; margin-top: 30px; color: #aaa; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+
+<h1>🏢 Dashboard ECO STRUCT - Como Funciona</h1>
+<p class="subtitle">Explicación sencilla del flujo de datos</p>
+
+<div class="flow">
+
+  <!-- PASO 1: TUS ARCHIVOS -->
+  <div class="step">
+    <div class="step-num">PASO 1</div>
+    <h2>📁 Tú metes los datos en estos 3 archivos</h2>
+    <p style="color:#888;font-size:0.85rem;margin:0 0 10px">Están en la carpeta <b>dashboard/</b>. Cuando quieras actualizar algo, solo cambias aquí:</p>
+    <div class="files">
+      <div class="file csv">
+        <div class="icon">📄</div>
+        <div class="name">ECO_STRUCT_-_Workspace_Gastos.csv</div>
+        <div class="desc">Facturas de Billdin (gastos directos, gastos generales, vehículos)</div>
+      </div>
+      <div class="file xlsx">
+        <div class="icon">📊</div>
+        <div class="name">CERTIFICACIONES POR MESES 2026.xlsx</div>
+        <div class="desc">Certificaciones de cada obra por mes</div>
+      </div>
+      <div class="file xlsx">
+        <div class="icon">👷</div>
+        <div class="name">GASTOS MANO DE OBRA POR MESES 2026.xlsx</div>
+        <div class="desc">Horas y coste de mano de obra por obra y mes</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">⬇️</div>
+  <div class="arrow-label">Dales doble clic a actualizar.bat</div>
+
+  <!-- PASO 2: PYTHON LEE -->
+  <div class="step">
+    <div class="step-num">PASO 2</div>
+    <h2>🐍 Python lee los 3 archivos</h2>
+    <div class="files">
+      <div class="file py" style="min-width:100%">
+        <div class="icon">⚙️</div>
+        <div class="name">extraer_datos.py</div>
+        <div class="desc">Lee el CSV y los dos Excel, calcula totales, prorrateos, y guarda todo en un JSON</div>
+      </div>
+    </div>
+    <div class="note">💡 Python es el "trabajador" que procesa los datos. No necesitas saber programar, solo ejecutarlo.</div>
+  </div>
+
+  <div class="arrow">⬇️</div>
+
+  <!-- PASO 3: JSON -->
+  <div class="step highlight">
+    <div class="step-num">PASO 3</div>
+    <h2>📦 Se crea un archivo JSON (el "almacén")</h2>
+    <div class="files">
+      <div class="file json" style="min-width:100%">
+        <div class="icon">🗄️</div>
+        <div class="name">datos_ecostruct.json</div>
+        <div class="desc">Contiene TODOS los datos calculados: certificaciones, gastos, prorrateos, márgenes, facturas... Todo en un solo archivo que los dashboards leen</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">⬇️</div>
+
+  <!-- PASO 4: GENERADORES -->
+  <div class="step">
+    <div class="step-num">PASO 4</div>
+    <h2>🎨 Dos scripts crean los dashboards</h2>
+    <div class="files">
+      <div class="file py">
+        <div class="icon">1️⃣</div>
+        <div class="name">regenerar_dashboard.py</div>
+        <div class="desc">Lee el JSON → crea el <b>dashboard.html</b> (V1 clásico)</div>
+      </div>
+      <div class="file py">
+        <div class="icon">2️⃣</div>
+        <div class="name">regenerar_dashboard_v2.py</div>
+        <div class="desc">Lee el JSON → crea el <b>dashboard_v2.html</b> (V2 corporativo)</div>
+      </div>
+      <div class="file py">
+        <div class="icon">📊</div>
+        <div class="name">crear_excel_completo.py</div>
+        <div class="desc">Lee los 3 archivos → crea el <b>ECO_STRUCT_Datos.xlsx</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">⬇️</div>
+
+  <!-- PASO 5: RESULTADO -->
+  <div class="step highlight">
+    <div class="step-num">PASO 5</div>
+    <h2>✅ Resultado: tus archivos finales</h2>
+    <div class="files outputs">
+      <div class="file html output">
+        <div class="icon">🌐</div>
+        <div class="name">dashboard.html</div>
+        <div class="desc">Dashboard V1 clásico</div>
+      </div>
+      <div class="file html output">
+        <div class="icon">🌐</div>
+        <div class="name">dashboard_v2.html</div>
+        <div class="desc">Dashboard V2 corporativo</div>
+      </div>
+      <div class="file xlsx2 output">
+        <div class="icon">📊</div>
+        <div class="name">ECO_STRUCT_Datos.xlsx</div>
+        <div class="desc">Excel con todas las pestañas</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">⬇️</div>
+
+  <!-- PASO 6: GITHUB -->
+  <div class="step">
+    <div class="step-num">PASO 6</div>
+    <h2>☁️ Se sube a GitHub (internet)</h2>
+    <div class="files">
+      <div class="file" style="min-width:100%;border-left:4px solid #333">
+        <div class="icon">🚀</div>
+        <div class="name">subir_a_github.bat</div>
+        <div class="desc">Sube los archivos a GitHub para que los veas desde el móvil, tablet u otro ordenador en <b>juanjosemas.github.io/dashboard</b></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- RESUMEN -->
+<div style="max-width:900px;margin:40px auto 0;background:white;border-radius:12px;padding:24px 28px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+  <h2 style="margin:0 0 12px;color:#2B3A4E">📋 Resumen en 3 líneas</h2>
+  <ol style="font-size:0.9rem;color:#555;line-height:1.8">
+    <li><b>Tú cambias datos</b> en los archivos de la carpeta <code>dashboard/</code></li>
+    <li><b>Das a actualizar.bat</b> y Python hace todo el trabajo solo</li>
+    <li><b>Se actualizan</b> los 2 dashboards + Excel + GitHub</li>
+  </ol>
+  <div class="bat-box" style="margin-top:16px">
+    actualizar.bat = extraer datos → crear dashboards → crear Excel → preguntar si subir a GitHub
+  </div>
+</div>
+
+<p class="footer">Dashboard ECO STRUCT - Generado automáticamente</p>
+
+</body>
+</html>

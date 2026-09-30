@@ -18,7 +18,10 @@ except ImportError:
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-CSV_FILE = r'C:\Users\jjmax\Downloads\1\dashboard\ECO_STRUCT_-_Workspace_Gastos.xlsx'
+# Carpeta base = esta misma carpeta del proyecto (nada de rutas fijas ni del NAS)
+BASE = os.path.dirname(os.path.abspath(__file__))
+DASH = os.path.join(BASE, 'dashboard')
+CSV_FILE = os.path.join(DASH, 'ECO_STRUCT_-_Workspace_Gastos.xlsx')
 
 # ============================================================
 # CERTIFICACIONES - Leido desde CSV
@@ -40,7 +43,7 @@ def _parse_euro_amount(s):
         return 0.0
 
 cert_data = []
-_cert_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\CERTIFICACIONES POR MESES 2026.xlsx'
+_cert_xlsx_path = os.path.join(DASH, 'CERTIFICACIONES POR MESES 2026.xlsx')
 _wb_cert = _openpyxl.load_workbook(_cert_xlsx_path, data_only=True)
 _ws_cert = _wb_cert.active
 for _row_idx in range(4, _ws_cert.max_row + 1):
@@ -127,7 +130,7 @@ def map_mo_name(mo_name):
 # ============================================================
 # LEER CSV COMPLETO
 # ============================================================
-csv_path = r'C:\Users\jjmax\Downloads\1\dashboard\ECO_STRUCT_-_Workspace_Gastos.csv'
+csv_path = os.path.join(DASH, 'ECO_STRUCT_-_Workspace_Gastos.csv')
 with open(csv_path, 'r', encoding='latin-1') as f:
     content = f.read()
 
@@ -142,7 +145,7 @@ for row in reader:
     proyecto = row.get('Proyecto', '').strip()
     proyecto_id = row.get('Proyecto ID', '').strip()
     importe_str = row.get('Importe', '0').strip()
-    cod = row.get('C\u00f3digo', row.get('Codigo', '')).strip()
+    cod = row.get('Id externo', '').strip() or row.get('C\u00f3digo', row.get('Codigo', '')).strip()
     fecha = row.get('Fecha', '').strip()
     titulo = row.get('T\u00edtulo', '').strip()
     proveedor = row.get('Proveedor', '').strip()
@@ -206,7 +209,7 @@ for entry in facturas_por_obra:
 # MANO DE OBRA - Leido desde CSV
 # ============================================================
 mo_data = []
-_mo_xlsx_path = r'C:\Users\jjmax\Downloads\1\dashboard\GASTOS MANO DE OBRA POR MESES 2026.xlsx'
+_mo_xlsx_path = os.path.join(DASH, 'GASTOS MANO DE OBRA POR MESES 2026.xlsx')
 _wb_mo = _openpyxl.load_workbook(_mo_xlsx_path, data_only=True)
 _ws_mo = _wb_mo.active
 for _row_idx in range(4, _ws_mo.max_row + 1):
@@ -231,11 +234,20 @@ for _row_idx in range(4, _ws_mo.max_row + 1):
         if _mp_horas > 0 and _mp_tarifa > 0:
             _mp_coste = _mp_horas * _mp_tarifa
     if _mp_horas > 0 or _mp_coste > 0:
-        mo_data.append((_mp_name, _mp_horas, 2026, _mp_coste))
+        mo_data.append((_mp_name, _mp_horas, 2026, _mp_coste, _mp_tarifa))
 
 if not mo_data:
     print("WARNING: No mano de obra data found in XLSX")
     mo_data = []
+
+# Tarifa general: la mas frecuente entre las obras con horas (modo fallback si
+# alguna fila del xlsx no trae precio). Se lee del propio xlsx, no se fija a mano.
+_mo_tarifas = [t[4] for t in mo_data if t[4] > 0]
+TARIFA_MO = round(_mo_tarifas[0] if _mo_tarifas else 0, 2)
+_tarifas_distintas = sorted(set(_mo_tarifas))
+print("  Tarifa mano de obra detectada en el xlsx: %s EUR/h %s" % (
+    ("{:,.2f}".format(TARIFA_MO).replace(',', 'X').replace('.', ',').replace('X', '.')),
+    ('(valores distintos en el xlsx: %s)' % _tarifas_distintas) if len(_tarifas_distintas) > 1 else ''))
 
 # ============================================================
 # CREAR EXCEL
@@ -370,7 +382,8 @@ ws_mo.sheet_properties.tabColor = "2ECC71"
 ws_mo['A1'] = "GASTOS DE MANO DE OBRA"
 ws_mo['A1'].font = title_font
 ws_mo.merge_cells('A1:F1')
-ws_mo['A2'] = "Tarifa: 20 EUR/hora (configurable)"
+ws_mo['A2'] = "Tarifa: %s EUR/hora (leida del xlsx de mano de obra)" % (
+    "{:,.2f}".format(TARIFA_MO).replace(',', 'X').replace('.', ',').replace('X', '.'))
 ws_mo['A2'].font = Font(bold=True, color='0F3460')
 for j, h in enumerate(["Proyecto", "Horas", "Tarifa (EUR/h)", "Total (EUR)", "Ano", "% del Total"], 1):
     ws_mo.cell(row=4, column=j, value=h)
@@ -381,7 +394,9 @@ for i, item in enumerate(mo_data, start=5):
     ws_mo.cell(row=i, column=1, value=map_mo_name(nombre))
     ws_mo.cell(row=i, column=2, value=horas)
     if horas > 0:
-        ws_mo.cell(row=i, column=3, value=20)
+        # Tarifa propia de la obra si el xlsx la indica; si no, la general
+        _tarifa_fila = item[4] if len(item) > 4 and item[4] > 0 else TARIFA_MO
+        ws_mo.cell(row=i, column=3, value=_tarifa_fila)
         ws_mo.cell(row=i, column=4).value = f'=B{i}*C{i}'
     else:
         ws_mo.cell(row=i, column=3, value=0)

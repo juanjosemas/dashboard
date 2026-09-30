@@ -1,0 +1,19 @@
+{
+  "proveedores": {
+    "ACAVIS": [
+      "MOSQUITERAS  (FORMENTERA 14).pdf",
+      "PUERTA CALLE  (FORMENTERA 14).pdf"
+    ],
+    "ELECTRICIDAD FERRIS": [
+      "ELECTRICIDAD  (FORMENTERA 12)  18-05-2026.pdf",
+      "ELECTRICIDAD  (FORMENTERA 14) (28-04-2026).pdf",
+      "Mecanismos Jung  (FORMENTERA 12).pdf"
+    ],
+    "GOCLIMA": [
+      "AIR ZONE  (FORMENTERA 14) (1).pdf",
+      "AIRE ACONDICIONADO  (FORMENTERA 14).pdf"
+    ]
+  },
+  "total_p": 3,
+  "total_pdfs": 7
+}

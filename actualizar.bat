@@ -20,6 +20,15 @@ echo.
 echo OK: Datos extraidos correctamente.
 echo.
 
+if exist INFORME_HUERFANAS.txt (
+    echo ---
+    echo REVISA EL INFORME DE FACTURAS HUERFANAS:
+    findstr /C:"TOTAL:" INFORME_HUERFANAS.txt
+    echo Detalle en INFORME_HUERFANAS.txt ^(obras con facturas sin certificacion^)
+    echo ---
+    echo.
+)
+
 echo [2/4] Regenerando dashboards...
 echo.
 
@@ -46,7 +55,7 @@ python regenerar_dashboard_v2.py
 echo OK: Dashboard v2 actualizado.
 echo.
 
-echo [3/4] Regenerando Excel...
+echo [3/5] Regenerando Excel...
 echo.
 
 python crear_excel_completo.py
@@ -63,7 +72,18 @@ echo.
 echo OK: Excel actualizado correctamente.
 echo.
 
-echo [4/4] Preguntando si quieres subir a GitHub...
+echo [4/5] Actualizando copia de seguridad...
+echo.
+
+python crear_copia_drive.py
+
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo AVISO: La copia local se ha creado, pero revise la sincronizacion con Google Drive.
+    echo.
+)
+
+echo [5/5] Preguntando si quieres subir a GitHub...
 echo.
 
 set /p SUBIR="Quieres subir a GitHub Pages? (S/N): "

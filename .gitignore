@@ -1,0 +1,12 @@
+# Copia de seguridad: se regenera sola con actualizar.bat
+COPIA_SEGURIDAD_DASHBOARD.zip
+
+# Informes generados en cada actualización
+INFORME_HUERFANAS.txt
+
+# Temporales de Google Drive, Python y la app
+.tmp.driveupload/
+.tmp.drivedownload/
+__pycache__/
+*.pyc
+.freebuff/

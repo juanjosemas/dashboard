@@ -7,6 +7,7 @@ Solo trabaja con año 2026.
 """
 import csv
 import io
+import os
 import re
 import openpyxl
 import collections
@@ -27,8 +28,9 @@ def parse_euro_amount(s):
     except:
         return 0.0
 
-BASE = r'C:\Users\jjmax\Downloads\1'
-DASH = BASE + r'\dashboard'
+# Carpeta base = esta misma carpeta del proyecto (nada de rutas fijas ni del NAS)
+BASE = os.path.dirname(os.path.abspath(__file__))
+DASH = os.path.join(BASE, 'dashboard')
 
 MONTH_NAMES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
                'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE']
@@ -148,7 +150,8 @@ for row in reader:
         elif 't' in key_lower and 'tulo' in key_lower: titulo = val
         elif 'proveedor' in key_lower and 'id' not in key_lower: proveedor = val
         elif key_lower == 'fecha': fecha = val
-        elif 'digo' in key_lower or 'odigo' in key_lower: codigo = val
+        elif key_lower == 'id externo': codigo = val
+        elif ('digo' in key_lower or 'odigo' in key_lower) and not codigo: codigo = val
         elif 'estado' == key_lower: estado = val
 
     importe = parse_euro_amount(importe_str)
@@ -193,19 +196,55 @@ for proj_csv, d in directos_por_proyecto.items():
             'titulo': f.get('titulo', ''), 'proveedor': f.get('proveedor', ''),
             'estado': f.get('estado', ''), 'importe': f.get('importe', 0)
         })
-all_facturas_dir.sort(key=lambda x: (x['proyecto'], -abs(x['importe'])))
 for _fi in all_facturas_dir:
     _f_parts = _fi.get('fecha', '').split('/')
     _fi['year'] = _f_parts[2] if len(_f_parts) == 3 else ''
     _fi['month'] = int(_f_parts[1]) if len(_f_parts) >= 2 and _f_parts[1].isdigit() else 0
+    _fi['day'] = int(_f_parts[0]) if len(_f_parts) >= 1 and _f_parts[0].isdigit() else 0
+all_facturas_dir.sort(key=lambda x: (x['year'], x['month'], x['day'], x['proyecto']), reverse=True)
 
 # ===== 4. MAPEO CSV -> CERTIFICACIONES =====
+def _norm_name(s):
+    """Normaliza un nombre de obra: mayusculas, sin acentos, sin espacios ni
+    signos de puntuacion. Permite emparejar '... -CALLE SOROLLA' con '... - CALLE SOROLLA'."""
+    s = str(s or '').upper()
+    s = s.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U').replace('Ñ', 'N')
+    return re.sub(r'[^A-Z0-9]', '', s)
+
+def _proj_code(s):
+    """Extrae el codigo numerico de obra del inicio del nombre.
+
+    Acepta 5 digitos (p.ej. '26013 - ARREGLO PAVIMENTOS...') y tambien 4
+    (p.ej. '2100 - OBRA MURO VECINO CAMPO'). Se exige que el codigo no siga
+    con mas digitos, para no partir un numero largo por la mitad.
+    """
+    m = re.match(r'\s*(\d{5}(?!\d)|\d{4}(?!\d))', str(s or ''))
+    return m.group(1) if m else ''
+
+# Indice por codigo de obra -> nombre de certificacion (si es unico)
+_cert_by_code = {}
+for _c in certificaciones:
+    _code = _proj_code(_c['nombre'])
+    if _code:
+        _cert_by_code.setdefault(_code, []).append(_c['nombre'])
+_cert_by_code = {k: v[0] for k, v in _cert_by_code.items() if len(v) == 1}
+
 csv_to_cert = {}
 for proj_csv in directos_por_proyecto:
     proj_upper = proj_csv.upper()
+    # 1) Emparejar por codigo de obra (lo mas fiable)
+    _code = _proj_code(proj_csv)
+    if _code and _code in _cert_by_code:
+        csv_to_cert[proj_csv] = _cert_by_code[_code]
+        continue
     for cert in certificaciones:
         cert_upper = cert['nombre'].upper()
         if cert_upper in proj_upper or proj_upper in cert_upper:
+            csv_to_cert[proj_csv] = cert['nombre']; break
+        # 1b) Emparejar por nombre normalizado (ignora espacios y puntuacion)
+        _n_proj = _norm_name(proj_csv)
+        _n_cert = _norm_name(cert['nombre'])
+        if len(_n_proj) >= 12 and len(_n_cert) >= 12 and (_n_cert in _n_proj or _n_proj in _n_cert):
             csv_to_cert[proj_csv] = cert['nombre']; break
         kw = False
         if 'FORMENTERA' in proj_upper and 'FORMENTERA' in cert_upper:
@@ -526,15 +565,96 @@ top10_suppliers = sorted(supplier_totals.items(), key=lambda x: -abs(x[1]))[:10]
 
 top10_proj = sorted(directos_por_proyecto.items(), key=lambda x: -abs(x[1]['total']))[:10]
 
-# Logo base64
+# ===== INFORME DE FACTURAS HUERFANAS =====
+# Una obra del CSV es "huerfana" si sus facturas se agrupan en una entrada que
+# NO tiene certificacion ni mano de obra asociada. Suele indicar que el nombre
+# de la obra en el CSV no se ha podido emparejar con el de los xlsx, por lo que
+# sus gastos quedan desdoblados y se pierden del analisis.
+_cert_names_set = {c['nombre'] for c in certificaciones}
+# Nombres de obra que tienen mano de obra asociada (por nombre o por mapeo)
+_mo_names_set = {m['proyecto'] for m in mano_obra_all}
+_mo_names_set |= {v for v in mo_to_project.values() if v}
+
+huerfanas = []
+_VACIAS = {'OBRA', 'OBRAS', 'PROYECTO', 'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS',
+           'EN', 'Y', 'A', 'CON', 'PARA', 'POR', 'UNA', 'UN', 'C', 'S', 'R'}
+
+def _tokens(s):
+    return {t for t in re.split(r'[^A-Z0-9]+', str(s or '').upper())
+            if len(t) >= 4 and t not in _VACIAS}
+
+def _sugerencia(nombre):
+    """Propone la obra del xlsx de certificaciones mas parecida por palabras,
+    para que se vea a mano si el nombre del CSV es una version mal escrita."""
+    _t = _tokens(nombre)
+    if not _t:
+        return ''
+    _mejor, _puntuacion = '', 0
+    for _c in certificaciones:
+        _p = len(_t & _tokens(_c['nombre']))
+        if _p > _puntuacion:
+            _mejor, _puntuacion = _c['nombre'], _p
+    return _mejor if _puntuacion >= 2 else ''
+
+for _p in proyectos_all:
+    if _p['gastos_directos'] > 0 and not _p['has_cert']:
+        _motivos = []
+        if _p['nombre'] not in _cert_names_set: _motivos.append('sin certificacion en el xlsx')
+        if _p['nombre'] not in _mo_names_set: _motivos.append('sin mano de obra en el xlsx')
+        _cod = _proj_code(_p['nombre'])
+        if _cod:
+            _otras = [c for c in certificaciones if _proj_code(c['nombre']) == _cod]
+            if _otras:
+                _motivos.append('existe la obra %s en el xlsx de certificaciones con otro formato de nombre' % _cod)
+        _sug = _sugerencia(_p['nombre'])
+        if _sug:
+            _motivos.append('posible obra parecida en el xlsx: "%s" (corrige el nombre en el CSV)' % _sug[:60])
+        huerfanas.append({
+            'nombre': _p['nombre'], 'codigo': _cod, 'sugerencia': _sug,
+            'gastos_directos': _p['gastos_directos'], 'facturas': _p['direct_count'],
+            'motivo': ' + '.join(_motivos) or 'sin certificacion ni mano de obra',
+        })
+huerfanas.sort(key=lambda x: -x['gastos_directos'])
+huerfanas_total = sum(h['gastos_directos'] for h in huerfanas)
+
+with open(BASE + r'\INFORME_HUERFANAS.txt', 'w', encoding='utf-8') as _hf:
+    _hf.write('INFORME DE FACTURAS HUERFANAS - %s\n' % CURRENT_YEAR)
+    _hf.write('=' * 78 + '\n\n')
+    _hf.write('Obras con gastos directos pero sin certificacion ni mano de obra asociadas.\n')
+    _hf.write('Suelen indicar que el nombre de la obra en el CSV no se ha podido emparejar\n')
+    _hf.write('con el de los xlsx, por lo que sus gastos quedan desdoblados.\n\n')
+    if not huerfanas:
+        _hf.write('SIN FACTURAS HUERFANAS. Todo correcto.\n')
+    else:
+        _hf.write('%-5s %-11s %-8s %s\n' % ('COD', 'GASTOS', 'FACTURAS', 'OBRA / MOTIVO'))
+        _hf.write('-' * 78 + '\n')
+        for _h in huerfanas:
+            _hf.write('%-5s %11s %8d  %s\n' % (
+                _h['codigo'] or '?', '{:,.2f}'.format(_h['gastos_directos']).replace(',', 'X').replace('.', ',').replace('X', '.'),
+                _h['facturas'], _h['nombre'][:70]))
+            _hf.write('%-25s -> %s\n' % ('', _h['motivo']))
+        _hf.write('-' * 78 + '\n')
+        _hf.write('TOTAL: %d obras, %s EUR\n' % (
+            len(huerfanas), '{:,.2f}'.format(huerfanas_total).replace(',', 'X').replace('.', ',').replace('X', '.')))
+print("  Facturas huerfanas: %d obras, %s EUR (detalle en INFORME_HUERFANAS.txt)" % (
+    len(huerfanas), '{:,.2f}'.format(huerfanas_total).replace(',', 'X').replace('.', ',').replace('X', '.')))
+
+# Logo base64 - vive dentro del proyecto para no depender del NAS
 import base64 as _b64
 import io as _io
+import os as _os
 from PIL import Image as _Img
-_logo_orig = _Img.open(r'C:\NAS\03PUBLI\LOGO\LOGO 1\For Web\png\symbol.png')
-_logo_rot = _logo_orig.rotate(180)
-_logo_buf = _io.BytesIO()
-_logo_rot.save(_logo_buf, format='PNG')
-_logo_b64 = 'data:image/png;base64,' + _b64.b64encode(_logo_buf.getvalue()).decode()
+_LOGO_PATH = _os.path.join(BASE, 'assets', 'symbol.png')
+_logo_path = _LOGO_PATH if _os.path.exists(_LOGO_PATH) else None
+if _logo_path is None:
+    print("AVISO: no se encuentra el logo; se generara el dashboard sin el.")
+_logo_orig = _Img.open(_logo_path) if _logo_path else None
+_logo_b64 = ''
+if _logo_orig is not None:
+    _logo_rot = _logo_orig.rotate(180)
+    _logo_buf = _io.BytesIO()
+    _logo_rot.save(_logo_buf, format='PNG')
+    _logo_b64 = 'data:image/png;base64,' + _b64.b64encode(_logo_buf.getvalue()).decode()
 
 output = {
     'proyectos_data': proyectos_all,
@@ -556,6 +676,8 @@ output = {
     'veh_cat_map': {k: round(v, 2) for k, v in veh_cat_map.items()},
     'top10_suppliers': [{'name': s[0], 'total': round(abs(s[1]), 2)} for s in top10_suppliers],
     'top10_proj': [{'name': p[0], 'total': round(abs(p[1]['total']), 2)} for p in top10_proj],
+    'huerfanas': huerfanas,
+    'huerfanas_total': round(huerfanas_total, 2),
     'mano_obra_all': mano_obra_all,
     'available_years': ['2026'],
     'monthly_data': monthly_data,
