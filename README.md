@@ -81,6 +81,13 @@ y esas filas **sí se suman** en el TOTAL GENERAL. Así el Excel cuadra con el
 dashboard: certificaciones, gastos directos, mano de obra y margen coinciden al
 céntimo (salvo el prorrateo, que puede diferir en céntimos por redondeo).
 
+La columna **"Mano de Obra (EUR)"** usa el mismo `SUMIF`, así que el Excel
+convierte cada nombre del xlsx de mano de obra al **nombre canónico de la obra**
+(por código de obra): `2100 - MURO VECINO` pasa a
+`2100 - OBRA MURO VECINO CAMPO`. Si algún día se cuela un nombre que no existe
+ni en el CSV ni en las certificaciones, salta un aviso al generar y se añade
+como obra sin certificación para que su coste tampoco se pierda.
+
 ---
 
 ## Qué hace `actualizar.bat`

@@ -253,6 +253,44 @@ huerfanas_excel = sorted(
 huerfanas_excel_total = sum(gastos_directos[n] for n in huerfanas_excel)
 print(f'Obras sin certificacion (se pierden como margen): {len(huerfanas_excel)} = {huerfanas_excel_total:,.2f} EUR')
 
+# ------------------------------------------------------------
+# NOMBRE CANONICO DE OBRA
+# El Resumen cruza obras por NOMBRE EXACTO (SUMIF), asi que el nombre del xlsx
+# de mano de obra tiene que llevar el mismo nombre que la certificacion (o que la
+# obra huerfana del CSV). Se empareja por codigo de obra y, si no hay, por
+# nombre normalizado. Sin esto, '2100 - MURO VECINO' no encontraba
+# '2100 - OBRA MURO VECINO CAMPO' y sus 8.976 EUR se quedaban fuera del total.
+# ------------------------------------------------------------
+ALL_NAMES = [c[0] for c in cert_data] + list(huerfanas_excel)
+_all_by_code = {}
+for _n in ALL_NAMES:
+    _c = _proj_code(_n)
+    if _c:
+        _all_by_code.setdefault(_c, []).append(_n)
+_all_by_code = {k: v[0] for k, v in _all_by_code.items() if len(v) == 1}
+
+
+def canon_name(name):
+    """Lleva cualquier nombre (del CSV o del xlsx de mano de obra) al nombre
+    canonico con el que aparece la obra en el Resumen."""
+    _code = _proj_code(name)
+    if _code and _code in _all_by_code:
+        return _all_by_code[_code]
+    _n = _norm_name(name)
+    if len(_n) >= 12:
+        for _canon in ALL_NAMES:
+            _nc = _norm_name(_canon)
+            if _n in _nc or _nc in _n:
+                return _canon
+    _mapped = map_csv_to_cert(name)
+    return _mapped if _mapped in ALL_NAMES else name
+
+
+# Obras que solo aparecen en el xlsx de mano de obra (sin CSV ni certificacion)
+# -> se calcula despues de leer mo_data (mas abajo, antes de la hoja 'Mano de Obra')
+mo_por_obra = {}
+huerfanas_mo = []
+
 # ============================================================
 # MANO DE OBRA - Leido desde CSV
 # ============================================================
@@ -436,10 +474,22 @@ ws_mo['A2'].font = Font(bold=True, color='0F3460')
 for j, h in enumerate(["Proyecto", "Horas", "Tarifa (EUR/h)", "Total (EUR)", "Ano", "% del Total"], 1):
     ws_mo.cell(row=4, column=j, value=h)
 style_header(ws_mo, 4, 6)
+# Cada obra con nombre canonico: '2100 - MURO VECINO' pasa a
+# '2100 - OBRA MURO VECINO CAMPO' para que el SUMIF del Resumen lo encuentre.
+for _item in mo_data:
+    _mn = canon_name(_item[0])
+    mo_por_obra[_mn] = mo_por_obra.get(_mn, 0) + _item[3]
+huerfanas_mo = sorted(
+    (n for n in mo_por_obra if n not in CERT_NAMES and n not in huerfanas_excel),
+    key=lambda n: -mo_por_obra[n],
+)
+if huerfanas_mo:
+    print(f'Obras solo en el xlsx de mano de obra (sin CSV ni certificacion): {len(huerfanas_mo)}'
+          f' = {sum(mo_por_obra[n] for n in huerfanas_mo):,.2f} EUR')
 for i, item in enumerate(mo_data, start=5):
     nombre, horas, anio = item[0], item[1], item[2]
     coste_directo = item[3] if len(item) > 3 else 0
-    ws_mo.cell(row=i, column=1, value=map_mo_name(nombre))
+    ws_mo.cell(row=i, column=1, value=canon_name(nombre))
     ws_mo.cell(row=i, column=2, value=horas)
     if horas > 0:
         # Tarifa propia de la obra si el xlsx la indica; si no, la general
@@ -573,15 +623,21 @@ for i, (cert_r, res_r) in enumerate(zip(cert_rows_range, res_rows_range)):
 
 tr_res = 12 + len(cert_data)
 
-# Obras con facturas pero sin certificacion: se anaden al desglose para que la
-# columna 'Gastos Directos' del TOTAL GENERAL cuadre con la hoja 'Gastos por
-# Proyecto' (y con el dashboard). Su margen sale negativo = perdida.
-if huerfanas_excel:
+# Obras sin certificacion: se anaden al desglose para que las columnas 'Gastos
+# Directos' y 'Mano de Obra' del TOTAL GENERAL cuadren con el dashboard. Su
+# margen sale negativo = perdida.
+_sin_cert = sorted(
+    [(n, gastos_directos.get(n, 0)) for n in huerfanas_excel] +
+    [(n, 0) for n in huerfanas_mo],
+    key=lambda x: -(x[1] + mo_por_obra.get(x[0], 0)),
+)
+if _sin_cert:
+    _perdida = sum(d for _, d in _sin_cert) + sum(mo_por_obra.get(n, 0) for n, _ in _sin_cert)
     ws_res.cell(row=tr_res, column=1,
-                value=f"OBRAS SIN CERTIFICACION ({len(huerfanas_excel)}) - {huerfanas_excel_total:,.2f} EUR de perdida")
+                value=f"OBRAS SIN CERTIFICACION ({len(_sin_cert)}) - {_perdida:,.2f} EUR de perdida")
     ws_res.cell(row=tr_res, column=1).font = Font(bold=True, color='B03A2E')
     tr_res += 1
-    for _hn in huerfanas_excel:
+    for _hn, _hd in _sin_cert:
         ws_res.cell(row=tr_res, column=1, value=_hn)
         ws_res.cell(row=tr_res, column=2, value=0)
         ws_res.cell(row=tr_res, column=3, value=0)
