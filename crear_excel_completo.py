@@ -64,9 +64,46 @@ for i, (name, amt, obs) in enumerate(cert_data, 1):
 # ============================================================
 # MAPEO CSV -> CERTIFICACIONES (mismo algoritmo que el dashboard)
 # ============================================================
+def _norm_name(s):
+    """Normaliza un nombre de obra: mayusculas, sin acentos, sin espacios ni
+    puntuacion. Permite emparejar '... -CALLE SOROLLA' con '... - CALLE SOROLLA'."""
+    s = str(s or '').upper()
+    s = s.replace('\u00c1', 'A').replace('\u00c9', 'E').replace('\u00cd', 'I').replace('\u00d3', 'O').replace('\u00da', 'U').replace('\u00d1', 'N')
+    return re.sub(r'[^A-Z0-9]', '', s)
+
+
+def _proj_code(s):
+    """Codigo numerico de obra al inicio del nombre (4 o 5 digitos)."""
+    m = re.match(r'\s*(\d{5}(?!\d)|\d{4}(?!\d))', str(s or ''))
+    return m.group(1) if m else ''
+
+
+# Indice codigo de obra -> nombre de certificacion (solo si es unico)
+_cert_by_code = {}
+for _cname, _, _ in cert_data:
+    _code = _proj_code(_cname)
+    if _code:
+        _cert_by_code.setdefault(_code, []).append(_cname)
+_cert_by_code = {k: v[0] for k, v in _cert_by_code.items() if len(v) == 1}
+CERT_NAMES = {c[0] for c in cert_data}
+
+
 def map_csv_to_cert(csv_name):
-    """Map CSV project name to certification name using keyword matching."""
+    """Map CSV project name to certification name: primero por codigo de obra,
+    luego por nombre normalizado y por ultimo por palabras clave."""
+    # 1) Codigo de obra (lo mas fiable)
+    _code = _proj_code(csv_name)
+    if _code and _code in _cert_by_code:
+        return _cert_by_code[_code]
     cu = csv_name.upper()
+    # 2) Nombre normalizado (ignora espacios, acentos y puntuacion)
+    _n_csv = _norm_name(csv_name)
+    if len(_n_csv) >= 12:
+        for cname, _, _ in cert_data:
+            _n_cert = _norm_name(cname)
+            if _n_csv in _n_cert or _n_cert in _n_csv:
+                return cname
+    # 3) Palabras clave
     for cname, _, _ in cert_data:
         nu = cname.upper()
         # Direct substring match
@@ -105,6 +142,9 @@ def map_csv_to_cert(csv_name):
 
 def map_mo_name(mo_name):
     """Map MO name to certification name."""
+    _code = _proj_code(mo_name)
+    if _code and _code in _cert_by_code:
+        return _cert_by_code[_code]
     mu = mo_name.upper()
     for cname, _, _ in cert_data:
         nu = cname.upper()
@@ -204,6 +244,14 @@ gastos_directos = gastos_directos_mapped
 # Also map facturas_por_obra project names
 for entry in facturas_por_obra:
     entry['proyecto'] = map_csv_to_cert(entry['proyecto'])
+
+# Obras con facturas pero SIN certificacion: se listan aparte en el Resumen
+huerfanas_excel = sorted(
+    (n for n in gastos_directos if n not in CERT_NAMES),
+    key=lambda n: -gastos_directos[n],
+)
+huerfanas_excel_total = sum(gastos_directos[n] for n in huerfanas_excel)
+print(f'Obras sin certificacion (se pierden como margen): {len(huerfanas_excel)} = {huerfanas_excel_total:,.2f} EUR')
 
 # ============================================================
 # MANO DE OBRA - Leido desde CSV
@@ -524,6 +572,27 @@ for i, (cert_r, res_r) in enumerate(zip(cert_rows_range, res_rows_range)):
     ws_res.cell(row=res_r, column=9).value = f"=IF(B{res_r}=0,0,G{res_r}/B{res_r})"
 
 tr_res = 12 + len(cert_data)
+
+# Obras con facturas pero sin certificacion: se anaden al desglose para que la
+# columna 'Gastos Directos' del TOTAL GENERAL cuadre con la hoja 'Gastos por
+# Proyecto' (y con el dashboard). Su margen sale negativo = perdida.
+if huerfanas_excel:
+    ws_res.cell(row=tr_res, column=1,
+                value=f"OBRAS SIN CERTIFICACION ({len(huerfanas_excel)}) - {huerfanas_excel_total:,.2f} EUR de perdida")
+    ws_res.cell(row=tr_res, column=1).font = Font(bold=True, color='B03A2E')
+    tr_res += 1
+    for _hn in huerfanas_excel:
+        ws_res.cell(row=tr_res, column=1, value=_hn)
+        ws_res.cell(row=tr_res, column=2, value=0)
+        ws_res.cell(row=tr_res, column=3, value=0)
+        ws_res.cell(row=tr_res, column=4, value=f"=C{tr_res}*$B$7")
+        ws_res.cell(row=tr_res, column=5, value=f"=SUMIF('Gastos por Proyecto'!A:A,A{tr_res},'Gastos por Proyecto'!B:B)")
+        ws_res.cell(row=tr_res, column=6, value=f"=SUMIF('Mano de Obra'!A:A,A{tr_res},'Mano de Obra'!D:D)")
+        ws_res.cell(row=tr_res, column=7, value=f"=D{tr_res}+E{tr_res}+F{tr_res}")
+        ws_res.cell(row=tr_res, column=8, value=f"=B{tr_res}-G{tr_res}")
+        ws_res.cell(row=tr_res, column=9, value=f"=IF(B{tr_res}=0,0,G{tr_res}/B{tr_res})")
+        tr_res += 1
+
 ws_res.cell(row=tr_res, column=1, value="TOTAL GENERAL")
 for c in range(2, 9):
     cl = get_column_letter(c)

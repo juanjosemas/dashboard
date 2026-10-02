@@ -68,6 +68,19 @@ importe y el motivo de cada una. En el dashboard aparecen marcadas en rojo con
 Arreglar una huérfana significa **corregir el nombre de la obra en el CSV** para
 que coincida con el del xlsx de certificaciones (mismo código de obra).
 
+### Cómo se reflejan en el Excel
+
+En la pestaña **Resumen** del Excel, la columna **"Gastos Directos (EUR)"** es
+el `SUMIF` de la pestaña **"Gastos por Proyecto"**: solo las facturas imputadas a
+esa obra. Los gastos generales y los vehículos van aparte (celdas B5 y B6), el
+prorrateo va en la columna D y la mano de obra en la F.
+
+Debajo de las 23 obras con certificación se añade un bloque **"OBRAS SIN
+CERTIFICACION"** con las huérfanas (certificación 0, margen negativo = pérdida),
+y esas filas **sí se suman** en el TOTAL GENERAL. Así el Excel cuadra con el
+dashboard: certificaciones, gastos directos, mano de obra y margen coinciden al
+céntimo (salvo el prorrateo, que puede diferir en céntimos por redondeo).
+
 ---
 
 ## Qué hace `actualizar.bat`
