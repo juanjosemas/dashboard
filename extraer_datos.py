@@ -313,6 +313,15 @@ for csv_proj in directos_por_proyecto:
         all_display_names.append(csv_proj); _adn_set.add(csv_proj)
 
 def match_mo_to_project(mo_upper, display_names):
+    # 0) Codigo de obra: '26021 - OBRA CRISTINA RESTAURANTE, ALICANTE' del xlsx de
+    # mano de obra debe caer en '26021 - OBRA CRISTINA RESTAURANTE ALICANTE' de las
+    # certificaciones aunque el nombre no coincida literalmente. Si no, la MO crea
+    # una obra fantasma sin certificacion y sus facturas se quedan descolgadas.
+    _mo_code = _proj_code(mo_upper)
+    if _mo_code:
+        for dname in display_names:
+            if _proj_code(dname) == _mo_code:
+                return dname
     for dname in display_names:
         dname_upper = dname.upper()
         if dname_upper in mo_upper or mo_upper in dname_upper: return dname

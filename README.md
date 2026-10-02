@@ -55,6 +55,11 @@ El nombre de la obra en el CSV casi nunca coincide literalmente con el del xlsx
 2. **Nombre normalizado** (mayúsculas, sin acentos, sin espacios ni signos).
 3. Coincidencia por palabras clave.
 
+La **mano de obra** del xlsx se empareja con las certificaciones por el mismo
+código de obra. Esto es lo que evita que, cuando certifiques una obra nueva y
+añadas sus facturas, la mano de obra de esa obra se quede en una ficha aparte
+sin certificación (y sus euros, fuera del margen).
+
 ---
 
 ## Obras huérfanas

@@ -50,9 +50,16 @@ for _row_idx in range(4, _ws_cert.max_row + 1):
     _cnombre = str(_ws_cert.cell(_row_idx, 1).value or '').strip()
     if not _cnombre:
         continue
-    # Column 14 = total del año
+    # Column 14 = total del año. Si viene vacio (la celda es una formula que
+    # nadie ha vuelto a calcular, p.ej. si el xlsx se ha guardado con una
+    # libreria), se suman los meses de las columnas 2-13.
     _total_v = _ws_cert.cell(_row_idx, 14).value
     _cimporte = _parse_euro_amount(_total_v) if _total_v is not None else 0
+    if _cimporte <= 0:
+        _cimporte = sum(
+            _parse_euro_amount(_ws_cert.cell(_row_idx, _c).value) or 0
+            for _c in range(2, 14)
+        )
     if _cimporte > 0 and _cnombre:
         cert_data.append((_cnombre, _cimporte, ""))
 

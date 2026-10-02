@@ -5,6 +5,9 @@ COPIA_SEGURIDAD_DASHBOARD.zip
 INFORME_HUERFANAS.txt
 
 # Temporales de Google Drive, Python y la app
+# ~$ son los ficheros de bloqueo que crea Excel al abrir un xlsx: no sirven de nada
+~$*.xlsx
+~$*.xls
 .tmp.driveupload/
 .tmp.drivedownload/
 __pycache__/
