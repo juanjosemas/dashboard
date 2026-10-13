@@ -21,3 +21,18 @@ __pycache__/
 /presupuesto_texto.txt
 /projectdata.json
 /gen_desglose.py
+
+# Restos de Control Gasolina que en su día se colaron aquí. Viven ahora en
+# la carpeta "Control Gasolina"; si alguno vuelve a la carpeta, quedarán
+# excluidos y subir_a_github.bat no los subirá.
+/ampliar_resumen_mensual.py
+/bordes_resumen.ps1
+/podar_2809.ps1
+/sonda_bordes.ps1
+/verif_registro.ps1
+/verif_resumen.ps1
+/check_hoja.py
+/crear_hoja_diario.ps1
+/crear_hoja_diario_v*.ps1
+/dump_des.ps1
+/temp_xlwings_script.py
