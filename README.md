@@ -127,7 +127,6 @@ una **copia** del proyecto, no pisará la copia de seguridad real.
 | `crear_copia_drive.py` | ZIP de seguridad + sincronización con Drive. |
 | `subir_a_github.bat` | `git add` + commit + push a GitHub Pages. |
 | `gen_switchyear.py` | Genera el selector de año del dashboard. |
-| `ver_proveedores.py` / `proveedores.html` | Análisis de proveedores. |
 | `month_filter.js` | Filtro de mes y multi-select de obras (compartido por V1 y V2). |
 | `pdf_func.js` | Generación de PDF por obra. Se regenera solo desde el V1. |
 | `assets/symbol.png` | El logo que se incrusta en los dashboards. |

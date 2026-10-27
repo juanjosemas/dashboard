@@ -36,3 +36,10 @@ __pycache__/
 /crear_hoja_diario_v*.ps1
 /dump_des.ps1
 /temp_xlwings_script.py
+
+# Visor de presupuestos de proveedores: es otro proyecto aparte.
+# Aqui no se usa, asi que no se sube aunque el fichero reaparezca.
+/proveedores.html
+/proveedores_data.json
+/ver_proveedores.py
+/ver_proveedores.bat
